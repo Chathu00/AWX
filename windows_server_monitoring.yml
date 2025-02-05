@@ -1,5 +1,5 @@
 - name: Windows Server Monitoring
-  hosts: 20.102.105.60
+  hosts: windows
   gather_facts: yes
   tasks:
 
