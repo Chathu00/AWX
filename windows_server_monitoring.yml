@@ -12,7 +12,9 @@
 
     - name: Display file copy status
       debug:
-        msg: "{{ copy_status }}"
+        msg: 
+          - "File Copy Status:"
+          - "{{ copy_status.stdout | default('No output') }}"
 
     - name: Read log file for specific time duration
       win_shell: |
@@ -22,7 +24,9 @@
 
     - name: Display logs for specific duration
       debug:
-        msg: "{{ log_results.stdout_lines }}"
+        msg: 
+          - "Log Entries from 10:00 to 12:00:"
+          - "{{ log_results.stdout_lines | default(['No logs found']) }}"
 
     - name: Check high CPU and Memory usage processes
       win_shell: |
@@ -32,16 +36,21 @@
 
     - name: Display high CPU/Memory processes
       debug:
-        msg: "{{ high_usage_processes.stdout_lines }}"
+        msg: 
+          - "High CPU/Memory Usage Processes:"
+          - "{{ high_usage_processes.stdout_lines | default(['No high CPU/memory processes found']) }}"
 
     - name: Check disk utilization
       win_shell: |
         Get-PSDrive C | Select-Object Used, Free, @{Name='UsagePercent';Expression={[math]::Round(($_.Used / ($_.Used + $_.Free) * 100),2)}}
       register: disk_usage
+      ignore_errors: yes
 
     - name: Display disk utilization
       debug:
-        msg: "{{ disk_usage.stdout_lines }}"
+        msg: 
+          - "Disk Utilization Details:"
+          - "{{ disk_usage.stdout_lines | default(['No data available']) }}"
 
     - name: Kill high CPU process (Replace with actual PID)
       win_shell: "taskkill /F /PID 1884"
@@ -50,5 +59,8 @@
 
     - name: Display process kill status
       debug:
-        msg: "{{ kill_process_status.stdout_lines }}"
+        msg: 
+          - "Process Termination Status:"
+          - "{{ kill_process_status.stdout_lines | default(['No process killed or incorrect PID']) }}"
+
 
