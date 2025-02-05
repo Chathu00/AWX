@@ -1,5 +1,5 @@
 - name: Windows Server Monitoring
-  hosts: ASCINLAP61697
+  hosts: windows
   gather_facts: yes
   tasks:
 
