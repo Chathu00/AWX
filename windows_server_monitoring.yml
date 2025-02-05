@@ -1,0 +1,54 @@
+---
+- name: Windows Server Monitoring
+  hosts: windows
+  gather_facts: yes
+  tasks:
+
+    - name: Copy log file from Windows Server
+      win_copy:
+        src: "C:\logs\app.log"
+        dest: "C:\Users\Administrator\Downloads\app.log"
+      register: copy_status
+      ignore_errors: yes
+
+    - name: Display file copy status
+      debug:
+        msg: "{{ copy_status }}"
+
+    - name: Read log file for specific time duration
+      win_shell: |
+        Select-String -Path "C:\logs\app.log" -Pattern "2025-02-01 10:00", "2025-02-01 12:00"
+      register: log_results
+      ignore_errors: yes
+
+    - name: Display logs for specific duration
+      debug:
+        msg: "{{ log_results.stdout_lines }}"
+
+    - name: Check high CPU and Memory usage processes
+      win_shell: |
+        Get-Process | Where-Object { $_.CPU -gt 50 -or $_.WS -gt 500MB } | Select-Object ProcessName, ID, CPU, WS
+      register: high_usage_processes
+      ignore_errors: yes
+
+    - name: Display high CPU/Memory processes
+      debug:
+        msg: "{{ high_usage_processes.stdout_lines }}"
+
+    - name: Check disk utilization
+      win_shell: |
+        Get-PSDrive C | Select-Object Used, Free, @{Name='UsagePercent';Expression={[math]::Round(($_.Used / ($_.Used + $_.Free) * 100),2)}}
+      register: disk_usage
+
+    - name: Display disk utilization
+      debug:
+        msg: "{{ disk_usage.stdout_lines }}"
+
+    - name: Kill high CPU process (Replace with actual PID)
+      win_shell: "taskkill /F /PID 1884"
+      register: kill_process_status
+      ignore_errors: yes
+
+    - name: Display process kill status
+      debug:
+        msg: "{{ kill_process_status.stdout_lines }}"
