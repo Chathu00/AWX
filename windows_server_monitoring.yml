@@ -1,66 +1,89 @@
-- name: Windows Server Monitoring
-  hosts: 10.112.0.10
-  gather_facts: yes
+---
+- name: Windows Server Monitoring and Management
+  hosts: windows
+  gather_facts: no
   tasks:
 
-    - name: Copy log file from Windows Server
-      win_copy:
-        src: "C:\\logs\\app.log"
-        dest: "C:\\Users\\Administrator\\Downloads\\app.log"
-      register: copy_status
-      ignore_errors: yes
+    - name: Fetch the last 10 lines of the log file
+      ansible.windows.win_shell: |
+        Get-Content C:\logs\app.log -Tail 10
+      register: log_output
 
-    - name: Display file copy status
-      debug:
-        msg: 
-          - "File Copy Status:"
-          - "{{ copy_status.stdout | default('No output') }}"
+    - name: Save fetched logs to local file
+      copy:
+        content: "{{ log_output.stdout }}"
+        dest: ./fetched_logs.txt
+      delegate_to: localhost
 
-    - name: Read log file for specific time duration
-      win_shell: |
-        Select-String -Path "C:\\logs\\app.log" -Pattern "2025-02-01 10:00", "2025-02-01 12:00"
-      register: log_results
-      ignore_errors: yes
+    - name: Scrape logs from a specific time range
+      ansible.windows.win_shell: |
+        Get-EventLog -LogName Application -After "02/01/2025 10:00" -Before "02/02/2025 12:00" | Select-Object -First 10
+      register: scraped_logs
 
-    - name: Display logs for specific duration
-      debug:
-        msg: 
-          - "Log Entries from 10:00 to 12:00:"
-          - "{{ log_results.stdout_lines | default(['No logs found']) }}"
+    - name: Save scraped logs to local file
+      copy:
+        content: "{{ scraped_logs.stdout }}"
+        dest: ./scraped_logs.txt
+      delegate_to: localhost
 
-    - name: Check high CPU and Memory usage processes
-      win_shell: |
-        Get-Process | Where-Object { $_.CPU -gt 50 -or $_.WS -gt 500MB } | Select-Object ProcessName, ID, CPU, WS
-      register: high_usage_processes
-      ignore_errors: yes
+    - name: Get top 10 CPU-consuming processes
+      ansible.windows.win_shell: |
+        Get-Process | Sort-Object -Descending CPU | Select-Object -First 10 Name,CPU,Id
+      register: cpu_usage
 
-    - name: Display high CPU/Memory processes
-      debug:
-        msg: 
-          - "High CPU/Memory Usage Processes:"
-          - "{{ high_usage_processes.stdout_lines | default(['No high CPU/memory processes found']) }}"
+    - name: Get top 10 Memory-consuming processes
+      ansible.windows.win_shell: |
+        Get-Process | Sort-Object -Descending WS | Select-Object -First 10 Name,WS,Id
+      register: memory_usage
 
-    - name: Check disk utilization
-      win_shell: |
-        Get-PSDrive C | Select-Object Used, Free, @{Name='UsagePercent';Expression={[math]::Round(($_.Used / ($_.Used + $_.Free) * 100),2)}}
+    - name: Save process usage details
+      copy:
+        content: |
+          Top 10 CPU-consuming processes:
+          {{ cpu_usage.stdout }}
+
+          Top 10 Memory-consuming processes:
+          {{ memory_usage.stdout }}
+        dest: ./process_usage.txt
+      delegate_to: localhost
+
+    - name: Get disk utilization
+      ansible.windows.win_shell: |
+        Get-PSDrive C | Select-Object Used,Free,UsedPercent
       register: disk_usage
+
+    - name: Save disk utilization details
+      copy:
+        content: "{{ disk_usage.stdout }}"
+        dest: ./disk_utilization.txt
+      delegate_to: localhost
+
+    - name: Display all outputs
+      debug:
+        msg:
+          - " Logs saved to fetched_logs.txt"
+          - " Scraped logs saved to scraped_logs.txt"
+          - " Process details saved to process_usage.txt"
+          - " Disk usage details saved to disk_utilization.txt"
+
+    - name: Ask if user wants to kill a process
+      pause:
+        prompt: "Do you want to kill a process? (yes/no)"
+      register: kill_decision
+
+    - name: Get PID to kill
+      pause:
+        prompt: "Enter the PID of the process to terminate:"
+      register: process_id
+      when: kill_decision.user_input | lower == "yes"
+
+    - name: Kill the process
+      ansible.windows.win_shell: |
+        Stop-Process -Id {{ process_id.user_input }} -Force
+      when: kill_decision.user_input | lower == "yes"
       ignore_errors: yes
 
-    - name: Display disk utilization
+    - name: Display final message
       debug:
-        msg: 
-          - "Disk Utilization Details:"
-          - "{{ disk_usage.stdout_lines | default(['No data available']) }}"
-
-    - name: Kill high CPU process (Replace with actual PID)
-      win_shell: "taskkill /F /PID 1884"
-      register: kill_process_status
-      ignore_errors: yes
-
-    - name: Display process kill status
-      debug:
-        msg: 
-          - "Process Termination Status:"
-          - "{{ kill_process_status.stdout_lines | default(['No process killed or incorrect PID']) }}"
-
-
+        msg: "Process {{ process_id.user_input }} terminated successfully."
+      when: kill_decision.user_input | lower == "yes"
