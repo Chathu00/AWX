@@ -1,6 +1,6 @@
 ---
 - name: Windows Server Monitoring and Management
-  hosts: 10.112.0.10
+  hosts: windows
   gather_facts: no
   tasks:
 
@@ -11,7 +11,7 @@
 
     - name: Save fetched logs to local file
       copy:
-        content: "{{ log_output.stdout }}"
+        content: "{{ log_output.stdout | default('No logs found') }}"
         dest: ./fetched_logs.txt
       delegate_to: localhost
 
@@ -22,7 +22,7 @@
 
     - name: Save scraped logs to local file
       copy:
-        content: "{{ scraped_logs.stdout }}"
+        content: "{{ scraped_logs.stdout | default('No logs found') }}"
         dest: ./scraped_logs.txt
       delegate_to: localhost
 
@@ -40,10 +40,10 @@
       copy:
         content: |
           Top 10 CPU-consuming processes:
-          {{ cpu_usage.stdout }}
+          {{ cpu_usage.stdout | default('No process data') }}
 
           Top 10 Memory-consuming processes:
-          {{ memory_usage.stdout }}
+          {{ memory_usage.stdout | default('No process data') }}
         dest: ./process_usage.txt
       delegate_to: localhost
 
@@ -54,17 +54,17 @@
 
     - name: Save disk utilization details
       copy:
-        content: "{{ disk_usage.stdout }}"
+        content: "{{ disk_usage.stdout | default('No disk data') }}"
         dest: ./disk_utilization.txt
       delegate_to: localhost
 
     - name: Display all outputs
       debug:
         msg:
-          - " Logs saved to fetched_logs.txt"
-          - " Scraped logs saved to scraped_logs.txt"
-          - " Process details saved to process_usage.txt"
-          - " Disk usage details saved to disk_utilization.txt"
+          - "✅ Logs saved to fetched_logs.txt"
+          - "✅ Scraped logs saved to scraped_logs.txt"
+          - "✅ Process details saved to process_usage.txt"
+          - "✅ Disk usage details saved to disk_utilization.txt"
 
     - name: Ask if user wants to kill a process
       pause:
@@ -85,5 +85,5 @@
 
     - name: Display final message
       debug:
-        msg: "Process {{ process_id.user_input }} terminated successfully."
+        msg: "✅ Process {{ process_id.user_input }} terminated successfully."
       when: kill_decision.user_input | lower == "yes"
