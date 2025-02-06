@@ -1,6 +1,6 @@
 ---
 - name: Windows Server Monitoring and Management
-  hosts: windows_host
+  hosts: all
   gather_facts: no
   tasks:
 
