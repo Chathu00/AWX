@@ -1,6 +1,6 @@
 ---
 - name: Windows Server Monitoring and Management
-  hosts: ansible_host
+  hosts: 10.112.0.10
   gather_facts: no
   tasks:
 
