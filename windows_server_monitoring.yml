@@ -4,7 +4,7 @@
 
   vars:
     remote_log_path: "C:\\logs\\app.log"  # Define remote log file path
-    retrieved_log_path: "/tmp/fetched_logs.txt"  # Local path to save logs
+    retrieved_log_path: "fetched_logs.txt"  # Local path to save logs
     process_to_kill: "fgtnhygtr"  # Process name to terminate (change as needed)
 
   tasks:
