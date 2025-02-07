@@ -57,9 +57,9 @@
        } else {
          Write-Output "Process {{ process_to_kill }} not found."
        }
-     register: kill_process_output
-     ignore_errors: yes
+      register: kill_process_output
+      ignore_errors: yes
 
-   - name: Display process kill result
-     debug:
-       msg: "{{ kill_process_output.stdout_lines }}"
+    - name: Display process kill result
+      debug:
+        msg: "{{ kill_process_output.stdout_lines }}"
