@@ -1,40 +1,45 @@
 - name: Manage Windows Server Tasks
   hosts: winserverhost
   gather_facts: no
- 
+
+  vars:
+    remote_log_path: "C:\\logs\\app.log"  # Define remote log file path
+    retrieved_log_path: "/tmp/fetched_logs.txt"  # Local path to save logs
+    process_to_kill: "fgtnhygtr"  # Process name to terminate (change as needed)
+
   tasks:
     - name: Fetch log file from Windows server
       win_shell: "Get-Content {{ remote_log_path }} -Tail 50"
       register: log_output
- 
+
     - name: Save log output locally
       copy:
         content: "{{ log_output.stdout }}"
         dest: "{{ retrieved_log_path }}"
- 
+
     - name: Display scraped logs
       debug:
         msg: "{{ log_output.stdout_lines }}"
- 
+
     - name: Check for high memory and CPU usage processes
       win_shell: |
         Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 Name,CPU,Id
       register: process_output
- 
+
     - name: Display high resource-consuming processes
       debug:
         msg: "{{ process_output.stdout_lines }}"
- 
+
     - name: Check disk utilization
       win_shell: "Get-PSDrive C | Select-Object Used,Free,UsedPercent"
       register: disk_usage
- 
+
     - name: Display disk usage
       debug:
         msg: "{{ disk_usage.stdout_lines }}"
- 
+
     - name: Kill a process (if running)
       win_shell: |
-        $process = Get-Process -Name {{ process_to_kill }} -ErrorAction SilentlyContinue
-        if ($process) { Stop-Process -Name {{ process_to_kill }} -Force }
+        $process = Get-Process -Name "{{ process_to_kill }}" -ErrorAction SilentlyContinue
+        if ($process) { Stop-Process -Name "{{ process_to_kill }}" -Force }
       ignore_errors: yes
