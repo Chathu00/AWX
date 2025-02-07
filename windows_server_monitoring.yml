@@ -1,8 +1,8 @@
 - name: Windows Server Monitoring
-  hosts: all
+  hosts: 10.112.0.10
   gather_facts: no
   tasks:
-    - name: Ping Windows Server
+    - name: Check connectivity to Windows server
       win_ping:
 
     - name: Fetch log file from Windows server
