@@ -1,5 +1,5 @@
 - name: Manage Windows Server Tasks
-  hosts: windows_host
+  hosts: winserverhost
   gather_facts: no
   vars_files:
     - windows_server_monitoring.yml
