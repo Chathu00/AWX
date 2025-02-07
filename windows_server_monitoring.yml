@@ -3,25 +3,35 @@
   gather_facts: no
 
   vars:
-    remote_log_path: "C:\\logs\\app.log"  # Define remote log file path
-    retrieved_log_path: "fetched_logs.txt"  # Local path to save logs
-    process_to_kill: "fgtnhygtr"  # Process name to terminate (change as needed)
+    remote_log_path: "C:\\logs\\app.log"  # Ensure this is set in AWX Inventory
+    retrieved_log_path: "/tmp/fetched_logs.txt"
+    process_to_kill: "notepad"  # Example process
 
   tasks:
+    - name: Debug remote_log_path variable
+      debug:
+        msg: "Log file path: {{ remote_log_path }}"
+
+    - name: Ensure remote_log_path is defined and not empty
+      fail:
+        msg: "Variable remote_log_path is not defined or empty!"
+      when: remote_log_path is not defined or remote_log_path | trim == ""
+
     - name: Fetch log file from Windows server
-      win_shell: "Get-Content {{ remote_log_path }} -Tail 50"
+      win_shell: "Get-Content '{{ remote_log_path }}' -Tail 50"
       register: log_output
+      ignore_errors: yes  # Prevents playbook failure if file does not exist
 
     - name: Save log output locally
       copy:
-        content: "{{ log_output.stdout }}"
+        content: "{{ log_output.stdout | default('No logs found!') }}"
         dest: "{{ retrieved_log_path }}"
 
     - name: Display scraped logs
       debug:
-        msg: "{{ log_output.stdout_lines }}"
+        msg: "{{ log_output.stdout_lines | default(['No logs retrieved.']) }}"
 
-    - name: Check for high memory and CPU usage processes
+    - name: Check high CPU and memory usage processes
       win_shell: |
         Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 Name,CPU,Id
       register: process_output
@@ -38,8 +48,8 @@
       debug:
         msg: "{{ disk_usage.stdout_lines }}"
 
-    - name: Kill a process (if running)
+    - name: Kill a process if running
       win_shell: |
-        $process = Get-Process -Name "{{ process_to_kill }}" -ErrorAction SilentlyContinue
-        if ($process) { Stop-Process -Name "{{ process_to_kill }}" -Force }
+        $process = Get-Process -Name '{{ process_to_kill }}' -ErrorAction SilentlyContinue
+        if ($process) { Stop-Process -Name '{{ process_to_kill }}' -Force }
       ignore_errors: yes
