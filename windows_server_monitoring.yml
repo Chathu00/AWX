@@ -44,15 +44,15 @@
       debug:
         msg: "{{ process_output.stdout_lines }}"
         
-     - name: Check C: drive disk utilization
-       win_shell: |
-         Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'" |
-         Select-Object DeviceID, Size, FreeSpace
-       register: disk_usage
+    - name: Check C: drive disk utilization
+      win_shell: |
+        Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'" |
+        Select-Object DeviceID, Size, FreeSpace
+     register: disk_usage
 
-     - name: Display C: drive disk usage
-       debug:
-       msg: "{{ disk_usage.stdout_lines }}"
+    - name: Display C: drive disk usage
+      debug:
+      msg: "{{ disk_usage.stdout_lines }}"
 
     - name: Kill a process if running
       win_shell: |
