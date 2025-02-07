@@ -1,84 +1,68 @@
 ---
-- name: Windows Server Monitoring and Management
-  hosts: windows_host
+- name: Windows Server Monitoring & Management
+  hosts: windows
   gather_facts: no
   tasks:
 
-    - name: Fetch the last 10 lines of the log file
-      ansible.windows.win_shell: Get-Content C:\logs\app.log -Tail 10
+    - name: Fetch Log File
+      win_shell: Get-Content C:\logs\app.log -Tail 10
       register: log_output
 
-    - name: Save fetched logs to local file
+    - name: Save Log Output
       copy:
         content: "{{ log_output.stdout }}"
         dest: "./fetched_logs.txt"
       delegate_to: localhost
 
-    - name: Scrape logs from a specific time range
-      ansible.windows.win_shell: Get-EventLog -LogName Application -After "02/01/2025 10:00" -Before "02/02/2025 12:00" | Select-Object -First 10
+    - name: Scrape Logs for Specific Time Range
+      win_shell: |
+        $start_time = Get-Date "02/01/2025 10:00"
+        $end_time = Get-Date "02/02/2025 12:00"
+        Get-EventLog -LogName Application | Where-Object { $_.TimeGenerated -ge $start_time -and $_.TimeGenerated -le $end_time } | Select-Object -First 10
       register: scraped_logs
 
-    - name: Save scraped logs to local file
+    - name: Save Scraped Logs
       copy:
         content: "{{ scraped_logs.stdout }}"
         dest: "./scraped_logs.txt"
       delegate_to: localhost
 
-    - name: Get top 10 CPU-consuming processes
-      ansible.windows.win_shell: Get-Process | Sort-Object -Descending CPU | Select-Object -First 10 Name,CPU,Id
-      register: cpu_usage
+    - name: Check High CPU Usage
+      win_shell: Get-Process | Sort-Object -Descending CPU | Select-Object -First 10 Name,CPU,Id
+      register: high_cpu_processes
 
-    - name: Get top 10 Memory-consuming processes
-      ansible.windows.win_shell: Get-Process | Sort-Object -Descending WS | Select-Object -First 10 Name,WS,Id
-      register: memory_usage
+    - name: Check High Memory Usage
+      win_shell: Get-Process | Sort-Object -Descending WS | Select-Object -First 10 Name,WS,Id
+      register: high_memory_processes
 
-    - name: Save process usage details
+    - name: Save CPU & Memory Usage Details
       copy:
         content: |
           Top 10 CPU-consuming processes:
-          {{ cpu_usage.stdout }}
+          {{ high_cpu_processes.stdout }}
 
           Top 10 Memory-consuming processes:
-          {{ memory_usage.stdout }}
+          {{ high_memory_processes.stdout }}
         dest: "./process_usage.txt"
       delegate_to: localhost
 
-    - name: Get disk utilization
-      ansible.windows.win_shell: Get-PSDrive C | Select-Object Used,Free,UsedPercent
-      register: disk_usage
+    - name: Check Disk Utilization
+      win_shell: Get-PSDrive C | Select-Object Used, Free
+      register: disk_utilization
 
-    - name: Save disk utilization details
+    - name: Save Disk Utilization Details
       copy:
-        content: "{{ disk_usage.stdout }}"
+        content: "{{ disk_utilization.stdout }}"
         dest: "./disk_utilization.txt"
       delegate_to: localhost
 
-    - name: Display all outputs
-      debug:
-        msg:
-          - "Logs saved to fetched_logs.txt"
-          - "Scraped logs saved to scraped_logs.txt"
-          - "Process details saved to process_usage.txt"
-          - "Disk usage details saved to disk_utilization.txt"
-
-    - name: Ask if user wants to kill a process
-      pause:
-        prompt: "Do you want to kill a process? (yes/no)"
-      register: kill_decision
-
-    - name: Get PID to kill
-      pause:
-        prompt: "Enter the PID of the process to terminate:"
-      register: process_id
-      when: kill_decision.user_input | lower == "yes"
-
-    - name: Kill the process
-      ansible.windows.win_shell: Stop-Process -Id {{ process_id.user_input }} -Force
-      when: kill_decision.user_input | lower == "yes"
+    - name: Kill a Process (Optional)
+      win_shell: Stop-Process -Id {{ process_id }} -Force
+      when: process_id is defined
+      register: kill_result
       ignore_errors: yes
 
-    - name: Display final message
+    - name: Show Process Termination Result
       debug:
-        msg: "Process {{ process_id.user_input }} terminated successfully."
-      when: kill_decision.user_input | lower == "yes"
-
+        msg: "{{ kill_result.stdout | default('Process termination failed or skipped') }}"
+      when: process_id is defined
