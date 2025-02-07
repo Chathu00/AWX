@@ -1,8 +1,6 @@
 - name: Manage Windows Server Tasks
   hosts: winserverhost
   gather_facts: no
-  vars_files:
-    - windows_server_monitoring.yml
  
   tasks:
     - name: Fetch log file from Windows server
