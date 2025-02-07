@@ -55,7 +55,7 @@
         content: "{{ disk_usage.stdout }}"
         dest: "./disk_utilization.txt"
 
-    # - name: Kill a process (if needed)
-    #   win_shell: Stop-Process -Id {{ process_id }} -Force
-    #   when: process_id is defined
+    - name: Kill a process (if needed)
+      win_shell: Stop-Process -Id {{ process_id }} -Force
+      when: process_id is defined
 
