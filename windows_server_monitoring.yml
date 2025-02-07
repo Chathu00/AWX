@@ -1,86 +1,59 @@
----
 - name: Windows Server Monitoring & Management
-  hosts: windows_servers
+  hosts: windows
   gather_facts: no
-  vars:
-    server:
-      name: "aipo-dev-win"
-      ip: "20.102.105.60"
-      username: "windows_user"
-      password: "THpW68qJw3Br!DX"  # Use Ansible Vault for secure storage
-    log_path: "C:\\logs\\app.log"
-    start_time: "02/01/2025 10:00"
-    end_time: "02/02/2025 12:00"
-
   tasks:
-    - name: Test WinRM connection
-      win_ping:
-      register: winrm_test
-      until: winrm_test is success
-      retries: 3
-      delay: 5
-      ignore_errors: yes
 
-    - name: Fail if WinRM connection is not successful
-      fail:
-        msg: "Failed to connect to the Windows server via WinRM."
-      when: winrm_test is failed
+    - name: Fetch log file from Windows server
+      win_shell: Get-Content C:\logs\app.log -Tail 10
+      register: log_output
 
-    - name: Fetch log files
-      win_shell: Get-Content {{ log_path }} -Tail 10
-      register: fetch_logs
-      when: winrm_test is success
-
-    - name: Save fetched logs to a local file
+    - name: Save fetched logs to local file
+      delegate_to: localhost
       copy:
-        content: "{{ fetch_logs.stdout }}"
+        content: "{{ log_output.stdout }}"
         dest: "./fetched_logs.txt"
-      when: winrm_test is success
 
-    - name: Scrape logs for a specific time range
-      win_shell: |
-        Get-EventLog -LogName Application -After "{{ start_time }}" -Before "{{ end_time }}" | Select-Object -First 10
+    - name: Scrape logs for specific time range
+      win_shell: Get-EventLog -LogName Application -After "02/01/2025 10:00" -Before "02/02/2025 12:00" | Select-Object -First 10
       register: scraped_logs
-      when: winrm_test is success
 
-    - name: Save scraped logs to a local file
+    - name: Save scraped logs to local file
+      delegate_to: localhost
       copy:
         content: "{{ scraped_logs.stdout }}"
         dest: "./scraped_logs.txt"
-      when: winrm_test is success
 
-    - name: Check high CPU and memory usage
-      win_shell: |
-        Get-Process | Sort-Object -Descending CPU | Select-Object -First 10 Name,CPU,Id
-        Get-Process | Sort-Object -Descending WS | Select-Object -First 10 Name,WS,Id
-      register: process_usage
-      when: winrm_test is success
+    - name: Check high CPU usage processes
+      win_shell: Get-Process | Sort-Object -Descending CPU | Select-Object -First 10 Name,CPU,Id
+      register: cpu_usage
 
-    - name: Save CPU and memory usage details to a local file
+    - name: Save CPU usage details
+      delegate_to: localhost
       copy:
-        content: "{{ process_usage.stdout }}"
-        dest: "./process_usage.txt"
-      when: winrm_test is success
+        content: "{{ cpu_usage.stdout }}"
+        dest: "./cpu_usage.txt"
+
+    - name: Check high Memory usage processes
+      win_shell: Get-Process | Sort-Object -Descending WS | Select-Object -First 10 Name,WS,Id
+      register: mem_usage
+
+    - name: Save Memory usage details
+      delegate_to: localhost
+      copy:
+        content: "{{ mem_usage.stdout }}"
+        dest: "./mem_usage.txt"
 
     - name: Check disk utilization
       win_shell: Get-PSDrive C | Select-Object Used,Free,UsedPercent
-      register: disk_utilization
-      when: winrm_test is success
+      register: disk_usage
 
-    - name: Save disk utilization details to a local file
+    - name: Save disk utilization details
+      delegate_to: localhost
       copy:
-        content: "{{ disk_utilization.stdout }}"
+        content: "{{ disk_usage.stdout }}"
         dest: "./disk_utilization.txt"
-      when: winrm_test is success
 
-    - name: Prompt user to kill a process
-      pause:
-        prompt: "Do you want to kill a process? (yes/no)"
-      register: kill_choice
-      when: winrm_test is success
+    - name: Kill a process (if needed)
+      win_shell: Stop-Process -Id {{ process_id }} -Force
+      when: process_id is defined
 
-    - name: Kill a process if user chooses to
-      win_shell: Stop-Process -Id {{ pid }} -Force
-      vars:
-        pid: "{{ lookup('prompt', 'Enter the PID of the process to terminate: ') }}"
-      when: kill_choice.user_input == 'yes' and winrm_test is success
