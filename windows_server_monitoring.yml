@@ -5,7 +5,7 @@
   vars:
     remote_log_path: "C:\\logs\\app.log"  # Ensure this is set in AWX Inventory
     retrieved_log_path: "/tmp/fetched_logs.txt"
-    process_to_kill: "notepad"  # Example process
+    process_to_kill: "abc"  # Example process
 
   tasks:
     - name: Debug remote_log_path variable
