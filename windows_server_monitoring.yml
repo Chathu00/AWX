@@ -50,6 +50,16 @@
 
     - name: Kill a process if running
       win_shell: |
-        $process = Get-Process -Name '{{ process_to_kill }}' -ErrorAction SilentlyContinue
-        if ($process) { Stop-Process -Name '{{ process_to_kill }}' -Force }
-      ignore_errors: yes
+       $process = Get-Process -Name '{{ process_to_kill }}' -ErrorAction SilentlyContinue
+       if ($process) { 
+         Stop-Process -Name '{{ process_to_kill }}' -Force
+         Write-Output "Process {{ process_to_kill }} stopped successfully."
+       } else {
+         Write-Output "Process {{ process_to_kill }} not found."
+       }
+     register: kill_process_output
+     ignore_errors: yes
+
+   - name: Display process kill result
+     debug:
+       msg: "{{ kill_process_output.stdout_lines }}"
