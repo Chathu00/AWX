@@ -45,7 +45,7 @@
         msg: "{{ process_output.stdout_lines }}"
 
     - name: Check disk utilization
-      win_shell: "Get-PSDrive C | Select-Object Used,Free,UsedPercent"
+      win_shell: "Get-WmiObject Win32_LogicalDisk | Select-Object DeviceID, Size, FreeSpace"
       register: disk_usage
 
     - name: Display disk usage
