@@ -37,12 +37,16 @@
 
     - name: Check high CPU and memory usage processes
       win_shell: |
-        Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 Name,CPU,Id
+        $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 Name,CPU,Id
+        $memProcesses = Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 5 Name,WS,Id
+        @("High CPU Usage Processes:") + ($cpuProcesses | Format-Table -AutoSize | Out-String) + 
+        @("High Memory Usage Processes:") + ($memProcesses | Format-Table -AutoSize | Out-String)
       register: process_output
 
-    - name: Display high resource-consuming processes
+    - name: Display high CPU and memory consuming processes
       debug:
         msg: "{{ process_output.stdout_lines }}"
+
         
     - name: Check disk utilization
       win_shell: "Get-WmiObject Win32_LogicalDisk | Select-Object DeviceID, Size, FreeSpace"
