@@ -1,61 +1,42 @@
-- name: Windows Server Monitoring
-  hosts: 10.112.0.10
+- name: Manage Windows Server Tasks
+  hosts: windows_host
   gather_facts: no
+  vars_files:
+    - windows_server_monitoring.yml
+ 
   tasks:
-    - name: Check connectivity to Windows server
-      win_ping:
-
     - name: Fetch log file from Windows server
-      win_shell: Get-Content C:\logs\app.log -Tail 10
+      win_shell: "Get-Content {{ remote_log_path }} -Tail 50"
       register: log_output
-
-    - name: Save fetched logs to local file
-      delegate_to: localhost
+ 
+    - name: Save log output locally
       copy:
         content: "{{ log_output.stdout }}"
-        dest: "./fetched_logs.txt"
-
-    - name: Scrape logs for specific time range
-      win_shell: Get-EventLog -LogName Application -After "02/01/2025 10:00" -Before "02/02/2025 12:00" | Select-Object -First 10
-      register: scraped_logs
-
-    - name: Save scraped logs to local file
-      delegate_to: localhost
-      copy:
-        content: "{{ scraped_logs.stdout }}"
-        dest: "./scraped_logs.txt"
-
-    - name: Check high CPU usage processes
-      win_shell: Get-Process | Sort-Object -Descending CPU | Select-Object -First 10 Name,CPU,Id
-      register: cpu_usage
-
-    - name: Save CPU usage details
-      delegate_to: localhost
-      copy:
-        content: "{{ cpu_usage.stdout }}"
-        dest: "./cpu_usage.txt"
-
-    - name: Check high Memory usage processes
-      win_shell: Get-Process | Sort-Object -Descending WS | Select-Object -First 10 Name,WS,Id
-      register: mem_usage
-
-    - name: Save Memory usage details
-      delegate_to: localhost
-      copy:
-        content: "{{ mem_usage.stdout }}"
-        dest: "./mem_usage.txt"
-
+        dest: "{{ retrieved_log_path }}"
+ 
+    - name: Display scraped logs
+      debug:
+        msg: "{{ log_output.stdout_lines }}"
+ 
+    - name: Check for high memory and CPU usage processes
+      win_shell: |
+        Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 Name,CPU,Id
+      register: process_output
+ 
+    - name: Display high resource-consuming processes
+      debug:
+        msg: "{{ process_output.stdout_lines }}"
+ 
     - name: Check disk utilization
-      win_shell: Get-PSDrive C | Select-Object Used,Free,UsedPercent
+      win_shell: "Get-PSDrive C | Select-Object Used,Free,UsedPercent"
       register: disk_usage
-
-    - name: Save disk utilization details
-      delegate_to: localhost
-      copy:
-        content: "{{ disk_usage.stdout }}"
-        dest: "./disk_utilization.txt"
-
-    - name: Kill a process (if needed)
-      win_shell: Stop-Process -Id {{ process_id }} -Force
-      when: process_id is defined
-
+ 
+    - name: Display disk usage
+      debug:
+        msg: "{{ disk_usage.stdout_lines }}"
+ 
+    - name: Kill a process (if running)
+      win_shell: |
+        $process = Get-Process -Name {{ process_to_kill }} -ErrorAction SilentlyContinue
+        if ($process) { Stop-Process -Name {{ process_to_kill }} -Force }
+      ignore_errors: yes
