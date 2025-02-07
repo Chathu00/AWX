@@ -4,8 +4,6 @@
     - name: Ping Windows Server
       win_ping:
 
-  tasks:
-
     - name: Fetch log file from Windows server
       win_shell: Get-Content C:\logs\app.log -Tail 10
       register: log_output
