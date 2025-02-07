@@ -12,10 +12,10 @@
       debug:
         msg: "Log file path: {{ remote_log_path }}"
 
-    - name: Ensure remote_log_path is defined and not empty
-      fail:
-        msg: "Variable remote_log_path is not defined or empty!"
-      when: remote_log_path is not defined or remote_log_path | trim == ""
+    - name: Ensure remote_log_path is defined
+  fail:
+    msg: "Variable remote_log_path is not defined!"
+  when: remote_log_path is not defined
 
     - name: Fetch log file from Windows server
       win_shell: "Get-Content '{{ remote_log_path }}' -Tail 50"
