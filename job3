@@ -1,0 +1,17 @@
+- name: Check Disk Utilization
+  hosts: winserverhost
+  gather_facts: no
+
+  tasks:
+    - name: Fetch disk utilization details for C-Drive
+      win_shell: |
+        Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq "C:" } | 
+        Select-Object DeviceID, 
+        @{Name="TotalSize_MB"; Expression={[math]::Round($_.Size / 1MB, 2)}}, 
+        @{Name="FreeSpace_MB"; Expression={[math]::Round($_.FreeSpace / 1MB, 2)}} | 
+        Format-Table -AutoSize | Out-String
+      register: disk_usage
+
+    - name: Display disk utilization
+      debug:
+        msg: "{{ disk_usage.stdout_lines }}"
