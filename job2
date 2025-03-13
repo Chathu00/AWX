@@ -1,0 +1,21 @@
+- name: Identify High CPU and Memory Consuming Processes
+  hosts: winserverhost
+  gather_facts: no
+
+  tasks:
+    - name: Fetch top CPU and memory-consuming processes
+      win_shell: |
+        $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 |
+          Select-Object Name, @{Name="CPU"; Expression={[math]::Round($_.CPU, 2)}}, Id
+        $memProcesses = Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 5 |
+          Select-Object Name, @{Name="Memory_MB"; Expression={[math]::Round($_.WorkingSet / 1MB, 2)}}, Id
+        $highestCPU = $cpuProcesses | Select-Object -First 1
+
+        @("🔹 High CPU Usage Processes (Top 5):") + ($cpuProcesses | Format-Table -AutoSize | Out-String) +
+        @("🔹 High Memory Usage Processes (Top 5) in MB:") + ($memProcesses | Format-Table -AutoSize | Out-String) +
+        @("🔹 Process with Highest CPU Usage: " + $highestCPU.Name + " (CPU: " + $highestCPU.CPU + ")")
+      register: process_output
+
+    - name: Display high CPU and memory consuming processes
+      debug:
+        msg: "{{ process_output.stdout_lines }}"
