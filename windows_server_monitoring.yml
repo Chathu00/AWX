@@ -15,7 +15,7 @@
 
     - name: Fetch log file from Windows server
       win_shell: |
-        $logContent = Get-Content "{{ remote_log_path }}" -Tail 50
+        $logContent = Get-Content '{{ remote_log_path }}' -Tail 50
         if (-not $logContent) {
           Write-Output "Log file is empty or no new entries found."
         } else {
@@ -25,13 +25,13 @@
 
     - name: Store log output in the database
       win_shell: |
-        $dbPath = "{{ db_path }}"
+        $dbPath = '{{ db_path }}'
         $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath;Version=3;")
         $conn.Open()
         $cmd = $conn.CreateCommand()
-        $cmd.CommandText = "CREATE TABLE IF NOT EXISTS logs (timestamp TEXT, log_data TEXT);"
+        $cmd.CommandText = 'CREATE TABLE IF NOT EXISTS logs (timestamp TEXT, log_data TEXT);'
         $cmd.ExecuteNonQuery()
-        $cmd.CommandText = "INSERT INTO logs (timestamp, log_data) VALUES ('$(Get-Date)', '{{ log_output.stdout | Replace("'", "''") }}');"
+        $cmd.CommandText = "INSERT INTO logs (timestamp, log_data) VALUES ('$(Get-Date)', '{{ log_output.stdout | replace("'", "''") }}');"
         $cmd.ExecuteNonQuery()
         $conn.Close()
       ignore_errors: yes
@@ -39,7 +39,6 @@
     - name: Check high CPU and memory usage processes
       win_shell: |
         $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 1 Name,CPU,Id
-        $memProcesses = Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 5 Name,WS,Id
         $cpuProcessName = $cpuProcesses.Name
         $cpuProcessId = $cpuProcesses.Id
         Write-Output "$cpuProcessName,$cpuProcessId"
@@ -51,13 +50,13 @@
 
     - name: Store process data in the database
       win_shell: |
-        $dbPath = "{{ db_path }}"
+        $dbPath = '{{ db_path }}'
         $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath;Version=3;")
         $conn.Open()
         $cmd = $conn.CreateCommand()
-        $cmd.CommandText = "CREATE TABLE IF NOT EXISTS processes (timestamp TEXT, process_name TEXT, process_id TEXT);"
+        $cmd.CommandText = 'CREATE TABLE IF NOT EXISTS processes (timestamp TEXT, process_name TEXT, process_id TEXT);'
         $cmd.ExecuteNonQuery()
-        $cmd.CommandText = "INSERT INTO processes (timestamp, process_name, process_id) VALUES ('$(Get-Date)', '{{ highest_cpu_process }}', '{{ process_output.stdout.split(',')[1] }}');"
+        $cmd.CommandText = "INSERT INTO processes (timestamp, process_name, process_id) VALUES ('$(Get-Date)', '{{ highest_cpu_process }}', '{{ process_output.stdout.split(",")[1] }}');"
         $cmd.ExecuteNonQuery()
         $conn.Close()
       ignore_errors: yes
@@ -68,13 +67,13 @@
 
     - name: Store disk usage in the database
       win_shell: |
-        $dbPath = "{{ db_path }}"
+        $dbPath = '{{ db_path }}'
         $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath;Version=3;")
         $conn.Open()
         $cmd = $conn.CreateCommand()
-        $cmd.CommandText = "CREATE TABLE IF NOT EXISTS disk_usage (timestamp TEXT, disk_data TEXT);"
+        $cmd.CommandText = 'CREATE TABLE IF NOT EXISTS disk_usage (timestamp TEXT, disk_data TEXT);'
         $cmd.ExecuteNonQuery()
-        $cmd.CommandText = "INSERT INTO disk_usage (timestamp, disk_data) VALUES ('$(Get-Date)', '{{ disk_usage.stdout | Replace("'", "''") }}');"
+        $cmd.CommandText = "INSERT INTO disk_usage (timestamp, disk_data) VALUES ('$(Get-Date)', '{{ disk_usage.stdout | replace("'", "''") }}');"
         $cmd.ExecuteNonQuery()
         $conn.Close()
       ignore_errors: yes
@@ -93,13 +92,13 @@
 
     - name: Store process kill result in the database
       win_shell: |
-        $dbPath = "{{ db_path }}"
+        $dbPath = '{{ db_path }}'
         $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath;Version=3;")
         $conn.Open()
         $cmd = $conn.CreateCommand()
-        $cmd.CommandText = "CREATE TABLE IF NOT EXISTS process_kills (timestamp TEXT, process_name TEXT, status TEXT);"
+        $cmd.CommandText = 'CREATE TABLE IF NOT EXISTS process_kills (timestamp TEXT, process_name TEXT, status TEXT);'
         $cmd.ExecuteNonQuery()
-        $cmd.CommandText = "INSERT INTO process_kills (timestamp, process_name, status) VALUES ('$(Get-Date)', '{{ highest_cpu_process }}', '{{ kill_process_output.stdout }}');"
+        $cmd.CommandText = "INSERT INTO process_kills (timestamp, process_name, status) VALUES ('$(Get-Date)', '{{ highest_cpu_process }}', '{{ kill_process_output.stdout | replace("'", "''") }}');"
         $cmd.ExecuteNonQuery()
         $conn.Close()
       ignore_errors: yes
