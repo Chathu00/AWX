@@ -1,17 +1,13 @@
-- name: Manage Windows Server Tasks
+- name: Manage Windows Server Tasks with DB Logging
   hosts: winserverhost
   gather_facts: no
 
   vars:
     remote_log_path: "C:\\logs\\app.log"  # Ensure this is set in AWX Inventory
-    retrieved_log_path: "C:\\logs\\fetched_logs.txt"
-    process_to_kill: "notepad"  # Example process
+    db_path: "C:\\logs\\monitoring_results.db"  # Database file
+    highest_cpu_process: ""
 
   tasks:
-    - name: Debug remote_log_path variable
-      debug:
-        msg: "Log file path: {{ remote_log_path }}"
-
     - name: Ensure remote_log_path is defined
       fail:
         msg: "Variable remote_log_path is not defined!"
@@ -27,47 +23,83 @@
         }
       register: log_output
 
-    - name: Display scraped logs
-      debug:
-        msg: "{{ log_output.stdout_lines }}"
-
-    - name: Display scraped logs
-      debug:
-        msg: "{{ log_output.stdout_lines | default(['No logs retrieved.']) }}"
+    - name: Store log output in the database
+      win_shell: |
+        $dbPath = "{{ db_path }}"
+        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath;Version=3;")
+        $conn.Open()
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = "CREATE TABLE IF NOT EXISTS logs (timestamp TEXT, log_data TEXT);"
+        $cmd.ExecuteNonQuery()
+        $cmd.CommandText = "INSERT INTO logs (timestamp, log_data) VALUES ('$(Get-Date)', '{{ log_output.stdout | Replace("'", "''") }}');"
+        $cmd.ExecuteNonQuery()
+        $conn.Close()
+      ignore_errors: yes
 
     - name: Check high CPU and memory usage processes
       win_shell: |
-        $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 Name,CPU,Id
+        $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 1 Name,CPU,Id
         $memProcesses = Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 5 Name,WS,Id
-        @("High CPU Usage Processes:") + ($cpuProcesses | Format-Table -AutoSize | Out-String) + 
-        @("High Memory Usage Processes:") + ($memProcesses | Format-Table -AutoSize | Out-String)
+        $cpuProcessName = $cpuProcesses.Name
+        $cpuProcessId = $cpuProcesses.Id
+        Write-Output "$cpuProcessName,$cpuProcessId"
       register: process_output
 
-    - name: Display high CPU and memory consuming processes
-      debug:
-        msg: "{{ process_output.stdout_lines }}"
+    - name: Extract highest CPU usage process
+      set_fact:
+        highest_cpu_process: "{{ process_output.stdout.split(',')[0] }}"
 
-        
-    - name: Check disk utilization
-      win_shell: "Get-WmiObject Win32_LogicalDisk | Select-Object DeviceID, Size, FreeSpace"
-      register: disk_usage
- 
-    - name: Display disk usage
-      debug:
-        msg: "{{ disk_usage.stdout_lines }}"
-
-    - name: Kill a process if running
+    - name: Store process data in the database
       win_shell: |
-       $process = Get-Process -Name '{{ process_to_kill }}' -ErrorAction SilentlyContinue
+        $dbPath = "{{ db_path }}"
+        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath;Version=3;")
+        $conn.Open()
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = "CREATE TABLE IF NOT EXISTS processes (timestamp TEXT, process_name TEXT, process_id TEXT);"
+        $cmd.ExecuteNonQuery()
+        $cmd.CommandText = "INSERT INTO processes (timestamp, process_name, process_id) VALUES ('$(Get-Date)', '{{ highest_cpu_process }}', '{{ process_output.stdout.split(',')[1] }}');"
+        $cmd.ExecuteNonQuery()
+        $conn.Close()
+      ignore_errors: yes
+
+    - name: Check disk utilization
+      win_shell: "Get-WmiObject Win32_LogicalDisk | Select-Object DeviceID, Size, FreeSpace | Format-Table -AutoSize"
+      register: disk_usage
+
+    - name: Store disk usage in the database
+      win_shell: |
+        $dbPath = "{{ db_path }}"
+        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath;Version=3;")
+        $conn.Open()
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = "CREATE TABLE IF NOT EXISTS disk_usage (timestamp TEXT, disk_data TEXT);"
+        $cmd.ExecuteNonQuery()
+        $cmd.CommandText = "INSERT INTO disk_usage (timestamp, disk_data) VALUES ('$(Get-Date)', '{{ disk_usage.stdout | Replace("'", "''") }}');"
+        $cmd.ExecuteNonQuery()
+        $conn.Close()
+      ignore_errors: yes
+
+    - name: Kill the highest CPU-consuming process
+      win_shell: |
+       $process = Get-Process -Name '{{ highest_cpu_process }}' -ErrorAction SilentlyContinue
        if ($process) { 
-         Stop-Process -Name '{{ process_to_kill }}' -Force
-         Write-Output "Process {{ process_to_kill }} stopped successfully."
+         Stop-Process -Name '{{ highest_cpu_process }}' -Force
+         Write-Output "Process {{ highest_cpu_process }} stopped successfully."
        } else {
-         Write-Output "Process {{ process_to_kill }} not found."
+         Write-Output "Process {{ highest_cpu_process }} not found."
        }
       register: kill_process_output
       ignore_errors: yes
 
-    - name: Display process kill result
-      debug:
-        msg: "{{ kill_process_output.stdout_lines }}"
+    - name: Store process kill result in the database
+      win_shell: |
+        $dbPath = "{{ db_path }}"
+        $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$dbPath;Version=3;")
+        $conn.Open()
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandText = "CREATE TABLE IF NOT EXISTS process_kills (timestamp TEXT, process_name TEXT, status TEXT);"
+        $cmd.ExecuteNonQuery()
+        $cmd.CommandText = "INSERT INTO process_kills (timestamp, process_name, status) VALUES ('$(Get-Date)', '{{ highest_cpu_process }}', '{{ kill_process_output.stdout }}');"
+        $cmd.ExecuteNonQuery()
+        $conn.Close()
+      ignore_errors: yes
