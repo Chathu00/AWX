@@ -1,0 +1,17 @@
+- name: Fetch Logs from Windows Server
+  hosts: winserverhost
+  gather_facts: no
+
+  vars:
+    remote_log_path: "C:\\logs\\app.log"
+
+  tasks:
+    - name: Fetch latest 50 log entries
+      win_shell: |
+        $logContent = Get-Content "{{ remote_log_path }}" -Tail 50
+        if (-not $logContent) { "Log file is empty or no new entries found." } else { $logContent }
+      register: log_output
+
+    - name: Display logs
+      debug:
+        msg: "{{ log_output.stdout_lines | default(['No logs retrieved.']) }}"
