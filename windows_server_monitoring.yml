@@ -18,13 +18,15 @@
 
     - name: Check high CPU and memory usage processes
       win_shell: |
-        $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 Name,CPU,Id
-        $memProcesses = Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 5 Name,@{Name="WS_MB"; Expression={[math]::Round($_.WorkingSet / 1MB, 2)}},Id
+        $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 |
+          Select-Object Name, @{Name="CPU"; Expression={[math]::Round($_.CPU, 2)}}, Id
+        $memProcesses = Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 5 |
+          Select-Object Name, @{Name="Memory_MB"; Expression={[math]::Round($_.WorkingSet / 1MB, 2)}}, Id
         $highestCPU = $cpuProcesses | Select-Object -First 1
 
-        @("High CPU Usage Processes (Top 5):") + ($cpuProcesses | Format-Table -AutoSize | Out-String) +
-        @("High Memory Usage Processes (Top 5) in MB:") + ($memProcesses | Format-Table -AutoSize | Out-String) +
-        @("Process with highest CPU: " + $highestCPU.Name + " (CPU: " + $highestCPU.CPU + ")")
+        @("🔹 High CPU Usage Processes (Top 5):") + ($cpuProcesses | Format-Table -AutoSize | Out-String) +
+        @("🔹 High Memory Usage Processes (Top 5) in MB:") + ($memProcesses | Format-Table -AutoSize | Out-String) +
+        @("🔹 Process with Highest CPU Usage: " + $highestCPU.Name + " (CPU: " + $highestCPU.CPU + ")")
       register: process_output
 
     - name: Display high CPU and memory consuming processes
@@ -48,9 +50,9 @@
         $highestCPU = (Get-Process | Sort-Object -Descending CPU | Select-Object -First 1)
         if ($highestCPU) { 
           Stop-Process -Id $highestCPU.Id -Force
-          "Process " + $highestCPU.Name + " (CPU: " + $highestCPU.CPU + ") stopped successfully."
+          "❌ Process " + $highestCPU.Name + " (CPU: " + $highestCPU.CPU + ") stopped successfully."
         } else {
-          "No high CPU process found."
+          "✅ No high CPU process found."
         }
       register: kill_process_output
       ignore_errors: yes
