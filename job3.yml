@@ -3,15 +3,22 @@
   gather_facts: no
 
   tasks:
-    - name: Fetch disk utilization details for all local drives (including C drive)
+    - name: Get all local drives
       win_shell: |
-        Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } | 
+        (Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }).DeviceID
+      register: drives
+
+    - name: Fetch disk utilization details for each drive
+      win_shell: |
+        Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq "{{ item }}" } | 
         Select-Object DeviceID, 
-        @{Name="TotalSize_MB"; Expression={[math]::Round($_.Size / 1MB, 2)}}, 
-        @{Name="FreeSpace_MB"; Expression={[math]::Round($_.FreeSpace / 1MB, 2)}} | 
+                      @{Name="TotalSize_MB"; Expression={[math]::Round($_.Size / 1MB, 2)}}, 
+                      @{Name="FreeSpace_MB"; Expression={[math]::Round($_.FreeSpace / 1MB, 2)}} | 
         Format-Table -AutoSize | Out-String
+      loop: "{{ drives.stdout_lines }}"
       register: disk_usage
 
-    - name: Display disk utilization
+    - name: Display disk utilization for each drive
       debug:
-        msg: "{{ disk_usage.stdout_lines }}"
+        msg: "{{ item.stdout_lines }}"
+      loop: "{{ disk_usage.results }}"
