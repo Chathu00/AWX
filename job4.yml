@@ -3,26 +3,21 @@
   gather_facts: no
 
   tasks:
-    - name: Prompt user for process ID
-      pause:
-        prompt: "Enter the Process ID (PID) you want to kill: "
-      register: user_pid
-
-    - name: Confirm before killing the process
-      pause:
-        prompt: "Are you sure you want to kill process with PID {{ user_pid.user_input }}? (yes/no)"
-      register: user_confirmation
+    - name: Validate Input
+      fail:
+        msg: "❌ Process ID is required. Please provide a valid process ID."
+      when: process_id is not defined or process_id | int <= 0
 
     - name: Kill the process if user confirms
       win_shell: |
-        if ("{{ user_confirmation.user_input }}" -eq "yes") {
-          Stop-Process -Id {{ user_pid.user_input }} -Force
-          Write-Output "❌ Process with PID {{ user_pid.user_input }} has been stopped successfully."
+        if ("{{ confirm_kill | lower }}" -eq "yes") {
+          Stop-Process -Id {{ process_id }} -Force
+          Write-Output "❌ Process with PID {{ process_id }} has been stopped successfully."
         } else {
           Write-Output "✅ Process termination cancelled."
         }
       register: kill_process_output
-      when: user_confirmation.user_input == "yes"
+      when: confirm_kill | lower == "yes"
 
     - name: Display process kill result
       debug:
