@@ -1,20 +1,29 @@
-- name: Kill Highest CPU Consuming Process
+- name: Kill a Specific Process After Confirmation
   hosts: winserverhost
   gather_facts: no
 
   tasks:
-    - name: Identify and kill highest CPU-consuming process
+    - name: Prompt user for process ID
+      pause:
+        prompt: "Enter the Process ID (PID) you want to kill: "
+      register: user_pid
+
+    - name: Confirm before killing the process
+      pause:
+        prompt: "Are you sure you want to kill process with PID {{ user_pid.user_input }}? (yes/no)"
+      register: user_confirmation
+
+    - name: Kill the process if user confirms
       win_shell: |
-        $highestCPU = (Get-Process | Sort-Object -Descending CPU | Select-Object -First 1)
-        if ($highestCPU) { 
-          Stop-Process -Id $highestCPU.Id -Force
-          "❌ Process " + $highestCPU.Name + " (CPU: " + $highestCPU.CPU + ") stopped successfully."
+        if ("{{ user_confirmation.user_input }}" -eq "yes") {
+          Stop-Process -Id {{ user_pid.user_input }} -Force
+          Write-Output "❌ Process with PID {{ user_pid.user_input }} has been stopped successfully."
         } else {
-          "✅ No high CPU process found."
+          Write-Output "✅ Process termination cancelled."
         }
       register: kill_process_output
-      ignore_errors: yes
+      when: user_confirmation.user_input == "yes"
 
     - name: Display process kill result
       debug:
-        msg: "{{ kill_process_output.stdout_lines }}"
+        msg: "{{ kill_process_output.stdout_lines | default('Operation cancelled by user.') }}"
