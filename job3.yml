@@ -3,9 +3,9 @@
   gather_facts: no
 
   tasks:
-    - name: Fetch disk utilization details for C-Drive
+    - name: Fetch disk utilization details for all local drives (including C drive)
       win_shell: |
-        Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DeviceID -eq "C:" } | 
+        Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } | 
         Select-Object DeviceID, 
         @{Name="TotalSize_MB"; Expression={[math]::Round($_.Size / 1MB, 2)}}, 
         @{Name="FreeSpace_MB"; Expression={[math]::Round($_.FreeSpace / 1MB, 2)}} | 
