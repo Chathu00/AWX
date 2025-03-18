@@ -11,8 +11,8 @@
     - name: Kill the process if user confirms
       win_shell: |
         if ("{{ confirm_kill | lower }}" -eq "yes") {
-          Stop-Process -Id {{ process_id }} -Force
-          Write-Output "❌ Process with PID {{ process_id }} has been stopped successfully."
+          taskkill /F /PID {{ process_id }}
+          Write-Output "❌ Process with PID {{ process_id }} has been forcefully killed."
         } else {
           Write-Output "✅ Process termination cancelled."
         }
