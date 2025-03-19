@@ -6,12 +6,32 @@
     remote_log_path: "C:\\logs\\app.log"
 
   tasks:
-    - name: Fetch latest 50 log entries
+    - name: Check Connection to Windows Server
+      win_ping:
+      register: connection_status
+
+    - name: Display Connection Status
+      debug:
+        msg: >
+          {%- if connection_status.ping is defined and connection_status.ping == 'pong' -%}
+            "Connected successfully to the Windows server."
+          {%- else -%}
+            "Failed to connect to the Windows server. Possible reasons:
+            - Incorrect host or unreachable network
+            - WinRM service is not running on the target machine
+            - Authentication failure due to incorrect credentials
+            - Firewall rules blocking WinRM access
+            - The server is down or experiencing issues"
+          {%- endif -%}
+
+    - name: Fetch latest 50 log entries (if connected)
       win_shell: |
         $logContent = Get-Content "{{ remote_log_path }}" -Tail 50
         if (-not $logContent) { "Log file is empty or no new entries found." } else { $logContent }
       register: log_output
+      when: connection_status.ping is defined and connection_status.ping == 'pong'
 
     - name: Display logs
       debug:
         msg: "{{ log_output.stdout_lines | default(['No logs retrieved.']) }}"
+      when: connection_status.ping is defined and connection_status.ping == 'pong'
