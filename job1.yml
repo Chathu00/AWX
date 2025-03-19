@@ -9,30 +9,34 @@
     - name: Check Connection to Windows Server
       win_ping:
       register: connection_status
-      ignore_unreachable: yes  # Ignores unreachable errors to allow custom handling
+      ignore_unreachable: yes  # Prevents Ansible from failing immediately, allowing custom handling
 
-    - name: Display Connection Status
+    - name: Handle Connection Failure (Stop Execution if Unreachable)
+      block:
+        - name: Display Failure Message
+          debug:
+            msg: >
+              "❌ Failed to connect to the Windows server. Possible reasons:
+              - Incorrect IP address or unreachable network.
+              - WinRM service is not running on the target machine.
+              - Authentication failure due to incorrect credentials.
+              - Firewall rules blocking WinRM access.
+              - The server is down or experiencing issues."
+        
+        - name: Stop Execution
+          meta: end_play
+      when: connection_status.unreachable is defined and connection_status.unreachable
+
+    - name: Confirm Connection Success
       debug:
-        msg: >
-          {%- if connection_status.unreachable is defined and connection_status.unreachable -%}
-            "Failed to connect to the Windows server. Possible reasons:
-            - The provided IP address is incorrect or the server is unreachable.
-            - WinRM service is not running on the target machine.
-            - Authentication failure due to incorrect credentials.
-            - Firewall rules blocking WinRM access.
-            - The server is down or experiencing issues."
-          {%- else -%}
-            "Connected successfully to the Windows server."
-          {%- endif -%}
+        msg: "✅ Connected successfully to the Windows server. Fetching logs now..."
 
-    - name: Fetch latest 50 log entries (if connected)
+    - name: Fetch latest 50 log entries
       win_shell: |
         $logContent = Get-Content "{{ remote_log_path }}" -Tail 50
         if (-not $logContent) { "Log file is empty or no new entries found." } else { $logContent }
       register: log_output
-      when: connection_status.ping is defined and connection_status.ping == 'pong'
 
     - name: Display logs
       debug:
         msg: "{{ log_output.stdout_lines | default(['No logs retrieved.']) }}"
-      when: connection_status.ping is defined and connection_status.ping == 'pong'
