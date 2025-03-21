@@ -1,6 +1,6 @@
 ---
 - name: Printer Troubleshooting Automation
-  hosts: all  # Ensure it runs on available machines
+  hosts: all
   gather_facts: no
   tasks:
 
@@ -32,22 +32,46 @@
         Get-Printer | ForEach-Object { Set-Printer -Name $_.Name -Online }
       when: ansible_host == target_machine and issue_type == "offline_status"
 
-    - name: Check Default Printer
+    - name: Set Correct Default Printer
       win_shell: |
-        (Get-Printer | Where-Object { $_.IsDefault -eq $true }).Name
-      register: default_printer
-      when: ansible_host == target_machine and issue_type == "offline_status"
-
-    - name: Set Default Printer
-      win_shell: |
-        Set-Printer -Name "{{ default_printer.stdout }}" -Default
-      when: ansible_host == target_machine and issue_type == "offline_status"
-
-    - name: Install Missing Printer Driver
-      win_shell: |
-        $printerDriver = Get-PrinterDriver | Where-Object { $_.Name -like '*HP*' }
-        if (-not $printerDriver) {
-          Start-Process -FilePath "\\\\fileserver\\drivers\\printer_driver.exe" -ArgumentList "/S" -Wait
+        $defaultPrinter = Get-Printer | Where-Object { $_.IsDefault -eq $true }
+        if (-not $defaultPrinter) {
+          $printerList = Get-Printer
+          if ($printerList) {
+            Set-Printer -Name ($printerList[0].Name) -Default
+          }
         }
+      when: ansible_host == target_machine and issue_type == "offline_status"
+
+    - name: Detect Installed Printer Model
+      win_shell: |
+        (Get-Printer | Select-Object -ExpandProperty DriverName) -join ', '
+      register: installed_printer_driver
+      when: ansible_host == target_machine and issue_type == "driver_update"
+
+    - name: Debug - Show Installed Driver
+      debug:
+        msg: "Installed Printer Driver: {{ installed_printer_driver.stdout }}"
+      when: ansible_host == target_machine and issue_type == "driver_update"
+
+    - name: Download Correct Printer Driver (if missing)
+      win_shell: |
+        $printerModel = Get-Printer | Select-Object -ExpandProperty DriverName
+        if ($printerModel -like "*HP*") {
+          $driverURL = "http://printer-drivers-server/hp_driver.exe"
+        } elseif ($printerModel -like "*Canon*") {
+          $driverURL = "http://printer-drivers-server/canon_driver.exe"
+        } else {
+          $driverURL = "http://printer-drivers-server/generic_driver.exe"
+        }
+
+        Invoke-WebRequest -Uri $driverURL -OutFile "C:\Temp\printer_driver.exe"
+      args:
+        creates: "C:\\Temp\\printer_driver.exe"
+      when: ansible_host == target_machine and issue_type == "driver_update"
+
+    - name: Install Correct Printer Driver
+      win_shell: |
+        Start-Process -FilePath "C:\Temp\printer_driver.exe" -ArgumentList "/S" -Wait
       when: ansible_host == target_machine and issue_type == "driver_update"
       ignore_errors: yes
