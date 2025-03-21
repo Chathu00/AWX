@@ -54,24 +54,31 @@
         msg: "Installed Printer Driver: {{ installed_printer_driver.stdout }}"
       when: ansible_host == target_machine and issue_type == "driver_update"
 
-    - name: Download Correct Printer Driver (if missing)
+    - name: Install Missing Printer Driver (from Network Share or Local Repository)
       win_shell: |
         $printerModel = Get-Printer | Select-Object -ExpandProperty DriverName
         if ($printerModel -like "*HP*") {
-          $driverURL = "http://printer-drivers-server/hp_driver.exe"
+          $driverPath = "\\fileserver\drivers\hp_driver.exe"
+          $localDriverPath = "C:\Drivers\hp_driver.exe"
         } elseif ($printerModel -like "*Canon*") {
-          $driverURL = "http://printer-drivers-server/canon_driver.exe"
+          $driverPath = "\\fileserver\drivers\canon_driver.exe"
+          $localDriverPath = "C:\Drivers\canon_driver.exe"
         } else {
-          $driverURL = "http://printer-drivers-server/generic_driver.exe"
+          $driverPath = "\\fileserver\drivers\generic_driver.exe"
+          $localDriverPath = "C:\Drivers\generic_driver.exe"
         }
 
-        Invoke-WebRequest -Uri $driverURL -OutFile "C:\Temp\printer_driver.exe"
-      args:
-        creates: "C:\\Temp\\printer_driver.exe"
-      when: ansible_host == target_machine and issue_type == "driver_update"
+        if (Test-Path $driverPath) {
+          Copy-Item -Path $driverPath -Destination "C:\Temp\printer_driver.exe"
+          $driverToInstall = "C:\Temp\printer_driver.exe"
+        } elseif (Test-Path $localDriverPath) {
+          Copy-Item -Path $localDriverPath -Destination "C:\Temp\printer_driver.exe"
+          $driverToInstall = "C:\Temp\printer_driver.exe"
+        } else {
+          Write-Output "Driver file not found on network share or local repository"
+          exit 1
+        }
 
-    - name: Install Correct Printer Driver
-      win_shell: |
-        Start-Process -FilePath "C:\Temp\printer_driver.exe" -ArgumentList "/S" -Wait
+        Start-Process -FilePath $driverToInstall -ArgumentList "/S" -Wait
       when: ansible_host == target_machine and issue_type == "driver_update"
       ignore_errors: yes
