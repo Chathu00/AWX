@@ -1,0 +1,30 @@
+---
+- name: Printer Troubleshooting
+  hosts: windows_clients  # Target group in inventory
+  gather_facts: no
+  tasks:
+
+    - name: Restart Print Spooler Service
+      win_service:
+        name: Spooler
+        state: restarted
+
+    - name: Clear Stuck Print Jobs
+      win_shell: |
+        Get-Printer | ForEach-Object { Remove-PrintJob -PrinterName $_.Name }
+      ignore_errors: yes  # Avoid errors if no stuck jobs
+
+    - name: Check Printer Connectivity
+      win_shell: |
+        Test-Connection -ComputerName PRINTER_IP -Count 2
+      register: ping_result
+
+    - name: Show Connectivity Result
+      debug:
+        msg: "{{ ping_result.stdout_lines }}"
+
+    - name: Install Missing Printer Driver (Example)
+      win_package:
+        path: "\\fileserver\drivers\printer_driver.exe"
+        state: present
+      ignore_errors: yes  # Skips if driver already installed
