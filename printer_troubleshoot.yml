@@ -1,6 +1,6 @@
 ---
 - name: Printer Troubleshooting Automation
-  hosts: "{{ target_machine }}"  # Machine IP/Hostname passed as extra variable
+  hosts: all  # Run on all hosts in the inventory
   gather_facts: no
   tasks:
 
@@ -8,28 +8,28 @@
       win_service:
         name: Spooler
         state: restarted
-      when: issue_type == "spooler_restart"
+      when: ansible_host == target_machine and issue_type == "spooler_restart"
 
     - name: Clear Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object { Remove-PrintJob -PrinterName $_.Name }
-      when: issue_type == "stuck_jobs"
-      ignore_errors: yes  # Avoids failure if no stuck jobs exist
+      when: ansible_host == target_machine and issue_type == "stuck_jobs"
+      ignore_errors: yes
 
     - name: Check Printer Connectivity
       win_shell: |
         Test-Connection -ComputerName PRINTER_IP -Count 2
       register: ping_result
-      when: issue_type == "connectivity"
+      when: ansible_host == target_machine and issue_type == "connectivity"
 
     - name: Show Connectivity Result
       debug:
         msg: "{{ ping_result.stdout_lines }}"
-      when: issue_type == "connectivity"
+      when: ansible_host == target_machine and issue_type == "connectivity"
 
     - name: Install Missing Printer Driver
       win_package:
-        path: "\\\\fileserver\\drivers\\printer_driver.exe"  # Fixed path syntax
+        path: "\\\\fileserver\\drivers\\printer_driver.exe"
         state: present
-      when: issue_type == "driver_update"
-      ignore_errors: yes  # Skips if driver is already installed
+      when: ansible_host == target_machine and issue_type == "driver_update"
+      ignore_errors: yes
