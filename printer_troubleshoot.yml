@@ -1,6 +1,6 @@
 ---
 - name: Printer Troubleshooting Automation
-  hosts: all  # Run on all hosts in the inventory
+  hosts: all  # Ensure it runs on available machines
   gather_facts: no
   tasks:
 
@@ -27,9 +27,27 @@
         msg: "{{ ping_result.stdout_lines }}"
       when: ansible_host == target_machine and issue_type == "connectivity"
 
+    - name: Fix Printer Showing Offline
+      win_shell: |
+        Get-Printer | ForEach-Object { Set-Printer -Name $_.Name -Online }
+      when: ansible_host == target_machine and issue_type == "offline_status"
+
+    - name: Check Default Printer
+      win_shell: |
+        (Get-Printer | Where-Object { $_.IsDefault -eq $true }).Name
+      register: default_printer
+      when: ansible_host == target_machine and issue_type == "offline_status"
+
+    - name: Set Default Printer
+      win_shell: |
+        Set-Printer -Name "{{ default_printer.stdout }}" -Default
+      when: ansible_host == target_machine and issue_type == "offline_status"
+
     - name: Install Missing Printer Driver
-      win_package:
-        path: "\\\\fileserver\\drivers\\printer_driver.exe"
-        state: present
+      win_shell: |
+        $printerDriver = Get-PrinterDriver | Where-Object { $_.Name -like '*HP*' }
+        if (-not $printerDriver) {
+          Start-Process -FilePath "\\\\fileserver\\drivers\\printer_driver.exe" -ArgumentList "/S" -Wait
+        }
       when: ansible_host == target_machine and issue_type == "driver_update"
       ignore_errors: yes
