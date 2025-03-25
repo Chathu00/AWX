@@ -8,29 +8,30 @@
       win_service:
         name: Spooler
         state: restarted
-      when: ansible_host == target_machine and issue_type == "spooler_restart"
+      when: issue_type == "spooler_restart" or issue_type == "all"
 
     - name: Clear Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object { Remove-PrintJob -PrinterName $_.Name }
-      when: ansible_host == target_machine and issue_type == "stuck_jobs"
+      when: issue_type == "stuck_jobs" or issue_type == "all"
       ignore_errors: yes
 
     - name: Check Printer Connectivity
       win_shell: |
-        Test-Connection -ComputerName PRINTER_IP -Count 2
+        Test-Connection -ComputerName {{ printer_ip }} -Count 2
       register: ping_result
-      when: ansible_host == target_machine and issue_type == "connectivity"
+      when: issue_type == "connectivity" or issue_type == "all"
+      ignore_errors: yes
 
     - name: Show Connectivity Result
       debug:
         msg: "{{ ping_result.stdout_lines }}"
-      when: ansible_host == target_machine and issue_type == "connectivity"
+      when: issue_type == "connectivity" or issue_type == "all"
 
     - name: Fix Printer Showing Offline
       win_shell: |
         Get-Printer | ForEach-Object { Set-Printer -Name $_.Name -Online }
-      when: ansible_host == target_machine and issue_type == "offline_status"
+      when: issue_type == "offline_status" or issue_type == "all"
 
     - name: Set Correct Default Printer
       win_shell: |
@@ -41,18 +42,18 @@
             Set-Printer -Name ($printerList[0].Name) -Default
           }
         }
-      when: ansible_host == target_machine and issue_type == "offline_status"
+      when: issue_type == "offline_status" or issue_type == "all"
 
     - name: Detect Installed Printer Model
       win_shell: |
         (Get-Printer | Select-Object -ExpandProperty DriverName) -join ', '
       register: installed_printer_driver
-      when: ansible_host == target_machine and issue_type == "driver_update"
+      when: issue_type == "driver_update" or issue_type == "all"
 
     - name: Debug - Show Installed Driver
       debug:
         msg: "Installed Printer Driver: {{ installed_printer_driver.stdout }}"
-      when: ansible_host == target_machine and issue_type == "driver_update"
+      when: issue_type == "driver_update" or issue_type == "all"
 
     - name: Install Missing Printer Driver (from Network Share or Local Repository)
       win_shell: |
@@ -80,5 +81,5 @@
         }
 
         Start-Process -FilePath $driverToInstall -ArgumentList "/S" -Wait
-      when: ansible_host == target_machine and issue_type == "driver_update"
+      when: issue_type == "driver_update" or issue_type == "all"
       ignore_errors: yes
