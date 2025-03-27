@@ -1,5 +1,5 @@
 - name: Printer Troubleshooting Automation
-  hosts: windows
+  hosts: winserverhost
   gather_facts: no
 
   tasks:
