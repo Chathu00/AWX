@@ -6,60 +6,35 @@
     servicenow_instance: "https://dev262979.service-now.com"
     servicenow_username: "LavanyaR"
     servicenow_password: "7@%C$4c{"  # ❗ Use Ansible Vault for security
+    incident_number: "INC0010792"  # Replace with your incident number
 
   tasks:
-    # 🔹 Debug to check if card_number is received properly
-    - name: Debug card_number
+    # 🔹 Step 1: Retrieve sys_id from ServiceNow for the given Incident Number
+    - name: Get sys_id of the incident
+      uri:
+        url: "{{ servicenow_instance }}/api/now/table/incident?sysparm_query=number={{ incident_number }}"
+        method: GET
+        headers:
+          Accept: "application/json"
+        user: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+        force_basic_auth: yes
+        status_code: 200
+        return_content: yes
+      register: incident_response
+
+    - name: Extract sys_id from response
+      set_fact:
+        incident_sys_id: "{{ incident_response.json.result[0].sys_id | default('') }}"
+
+    - name: Display sys_id (For Debugging)
       debug:
-        msg: "Card Number: {{ card_number | default('NOT SET') }}"
+        msg: "✅ Retrieved sys_id: {{ incident_sys_id }}"
 
-    # 🔹 Step 1: Check Connection to Windows Server
-    - name: Check Connection to Windows Server
-      win_ping:
-      register: connection_status
-      ignore_unreachable: yes  # Prevents immediate failure
-
-    - name: Handle Connection Failure
-      block:
-        - name: Display Failure Message
-          debug:
-            msg: >
-              "❌ Failed to connect to the Windows server. Possible reasons:
-              - Incorrect IP or unreachable network.
-              - WinRM service not running.
-              - Incorrect credentials.
-              - Firewall blocking WinRM access.
-              - The server is down."
-        - name: Stop Execution
-          meta: end_play
-      when: connection_status.unreachable is defined and connection_status.unreachable
-
-    - name: Confirm Connection Success
-      debug:
-        msg: "✅ Connected successfully to the Windows server. Fetching process details..."
-
-    # 🔹 Step 2: Fetch High CPU & Memory Consuming Processes
-    - name: Fetch top CPU and memory-consuming processes
-      win_shell: |
-        $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 |
-          Select-Object Name, @{Name="CPU"; Expression={[math]::Round($_.CPU, 2)}}, Id
-        $memProcesses = Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 5 |
-          Select-Object Name, @{Name="Memory_MB"; Expression={[math]::Round($_.WorkingSet / 1MB, 2)}}, Id
-        $highestCPU = $cpuProcesses | Select-Object -First 1
-
-        @("🔹 High CPU Usage Processes (Top 5):") + ($cpuProcesses | Format-Table -AutoSize | Out-String) +
-        @("🔹 High Memory Usage Processes (Top 5) in MB:") + ($memProcesses | Format-Table -AutoSize | Out-String) +
-        @("🔹 Process with Highest CPU Usage: " + $highestCPU.Name + " (CPU: " + $highestCPU.CPU + ")")
-      register: process_output
-
-    - name: Display high CPU and memory consuming processes
-      debug:
-        msg: "{{ process_output.stdout_lines }}"
-
-    # 🔹 Step 3: Close Incident in ServiceNow (if card_number is provided)
+    # 🔹 Step 2: Close the Incident using sys_id
     - name: Close Incident in ServiceNow
       uri:
-        url: "{{ servicenow_instance }}/api/now/table/incident/{{ card_number }}"
+        url: "{{ servicenow_instance }}/api/now/table/incident/{{ incident_sys_id }}"
         method: PATCH
         headers:
           Content-Type: "application/json"
@@ -71,4 +46,4 @@
           close_notes: "High CPU/memory issue resolved by automation."
         body_format: json
         status_code: 200, 204
-      when: card_number is defined and card_number | length > 0
+      when: incident_sys_id | length > 0
