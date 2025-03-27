@@ -33,7 +33,11 @@
     # 3️⃣ Clear Stuck Print Jobs
     - name: Clear Stuck Print Jobs
       win_shell: |
-        Get-Printer | ForEach-Object { Remove-PrintJob -PrinterName $_.Name }
+        Get-Printer | ForEach-Object { 
+          Get-PrintJob -PrinterName $_.Name | ForEach-Object { 
+            Remove-PrintJob -PrinterName $_.Name -ID $_.ID 
+          } 
+        }
       when: issue_type == "stuck_jobs" or issue_type == "all"
       ignore_errors: yes
 
