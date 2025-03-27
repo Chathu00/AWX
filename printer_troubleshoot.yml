@@ -29,3 +29,46 @@
     - name: Confirm Connection Success
       debug:
         msg: "✅ Connected successfully to the Windows server. Starting troubleshooting..."
+
+    # 3️⃣ Clear Stuck Print Jobs
+    - name: Clear Stuck Print Jobs
+      win_shell: |
+        Get-Printer | ForEach-Object { Remove-PrintJob -PrinterName $_.Name }
+      when: issue_type == "stuck_jobs" or issue_type == "all"
+      ignore_errors: yes
+
+    # 4️⃣ Restart Print Spooler Service
+    - name: Restart Print Spooler Service
+      win_service:
+        name: Spooler
+        state: restarted
+      when: issue_type == "spooler_restart" or issue_type == "all"
+
+    # 5️⃣ Fix Printer Showing Offline (Fixed Method)
+    - name: Fix Printer Showing Offline
+      win_shell: |
+        $printers = Get-Printer | Where-Object { $_.PrinterStatus -eq 'Offline' }
+        foreach ($printer in $printers) {
+            Restart-Service Spooler
+            Start-Sleep -Seconds 5
+            Write-Host "Checking status again..."
+            $newStatus = (Get-Printer -Name $printer.Name).PrinterStatus
+            if ($newStatus -ne 'Offline') {
+                Write-Host "✅ Printer $($printer.Name) is now online."
+            } else {
+                Write-Host "❌ Printer $($printer.Name) is still offline."
+            }
+        }
+      when: issue_type == "offline_status" or issue_type == "all"
+
+    # 6️⃣ Detect Installed Printer Model
+    - name: Detect Installed Printer Model
+      win_shell: |
+        (Get-Printer | Select-Object -ExpandProperty DriverName) -join ', '
+      register: installed_printer_driver
+      when: issue_type == "driver_update" or issue_type == "all"
+
+    - name: Debug - Show Installed Driver
+      debug:
+        msg: "Installed Printer Driver: {{ installed_printer_driver.stdout }}"
+      when: issue_type == "driver_update" or issue_type == "all"
