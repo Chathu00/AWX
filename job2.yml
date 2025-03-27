@@ -57,4 +57,5 @@
         body: '{"state": "Resolved", "close_notes": "High CPU/memory issue resolved by automation."}'
         body_format: json
         status_code: 200, 204
-      when: card_number | length > 0
+      when: card_number is defined and card_number | default('') | trim | length > 0
+
