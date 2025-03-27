@@ -3,12 +3,16 @@
   gather_facts: no
 
   vars:
-    card_number: "{{ card_number | default('') }}"  # Ensures card_number is always a string
     servicenow_instance: "https://dev262979.service-now.com"
     servicenow_username: "LavanyaR"
     servicenow_password: "7@%C$4c{"  # ❗ Use Ansible Vault for security
 
   tasks:
+    # 🔹 Debug to check if card_number is received properly
+    - name: Debug card_number
+      debug:
+        msg: "Card Number: {{ card_number | default('NOT SET') }}"
+
     # 🔹 Step 1: Check Connection to Windows Server
     - name: Check Connection to Windows Server
       win_ping:
@@ -67,4 +71,4 @@
           close_notes: "High CPU/memory issue resolved by automation."
         body_format: json
         status_code: 200, 204
-      when: card_number | default('') | length > 0  # ✅ Fix applied
+      when: card_number is defined and card_number | length > 0
