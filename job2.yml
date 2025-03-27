@@ -3,7 +3,7 @@
   gather_facts: no
 
   vars:
-    card_number: ""  # Passed from AWX
+    card_number: "{{ card_number }}"  # Passed from AWX
     servicenow_instance: "https://dev262979.service-now.com"
     servicenow_username: "LavanyaR"
     servicenow_password: "7@%C$4c{"  # ❗ Recommendation: Use Ansible Vault instead of plaintext
