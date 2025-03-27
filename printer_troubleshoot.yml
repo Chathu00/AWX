@@ -10,7 +10,7 @@
       ignore_unreachable: yes
 
     # 2️⃣ Handle Connection Failure (Stop Execution if Unreachable)
-    - name: Handle Connection Failure (Stop Execution if Unreachable)
+    - name: Handle Connection Failure
       block:
         - name: Display Failure Message
           debug:
@@ -21,51 +21,64 @@
               - Authentication failure due to incorrect credentials.
               - Firewall rules blocking WinRM access.
               - The server is down or experiencing issues."
-
+        
         - name: Stop Execution
           meta: end_play
       when: connection_status.unreachable is defined and connection_status.unreachable
 
-    # 3️⃣ Confirm Connection Success
     - name: Confirm Connection Success
       debug:
-        msg: "✅ Connected successfully to the Windows server. Proceeding with troubleshooting..."
+        msg: "✅ Connected successfully to the Windows server. Starting troubleshooting..."
 
-    # 4️⃣ Clear Stuck Print Jobs
+    # 3️⃣ Clear Stuck Print Jobs
     - name: Clear Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object { Remove-PrintJob -PrinterName $_.Name }
       when: issue_type == "stuck_jobs" or issue_type == "all"
       ignore_errors: yes
 
-    # 5️⃣ Restart Print Spooler Service
+    # 4️⃣ Restart Print Spooler Service
     - name: Restart Print Spooler Service
       win_service:
         name: Spooler
         state: restarted
       when: issue_type == "spooler_restart" or issue_type == "all"
 
-    # 6️⃣ Check Printer Connectivity
+    # 5️⃣ Check Printer Connectivity (Optional IP)
     - name: Check Printer Connectivity
       win_shell: |
-        $result = Test-Connection -ComputerName {{ printer_ip | default('localhost') }} -Count 2 -ErrorAction SilentlyContinue
-        if ($result) { $result | Out-String } else { "Connection failed" }
+        if ("{{ printer_ip }}" -ne "") {
+          Test-Connection -ComputerName {{ printer_ip }} -Count 2
+        } else {
+          Write-Host "Printer IP not provided, skipping connectivity test."
+        }
       register: ping_result
       when: issue_type == "connectivity" or issue_type == "all"
       ignore_errors: yes
 
     - name: Show Connectivity Result
       debug:
-        msg: "{{ ping_result.stdout | default('No output received') }}"
+        msg: "{{ ping_result.stdout_lines | default('No output') }}"
       when: issue_type == "connectivity" or issue_type == "all"
 
-    # 7️⃣ Fix Printer Showing Offline
+    # 6️⃣ Fix Printer Showing Offline (Fixed Method)
     - name: Fix Printer Showing Offline
       win_shell: |
-        Get-Printer | ForEach-Object { Set-Printer -Name $_.Name -Online }
+        $printers = Get-Printer | Where-Object { $_.PrinterStatus -eq 'Offline' }
+        foreach ($printer in $printers) {
+            Restart-Service Spooler
+            Start-Sleep -Seconds 5
+            Write-Host "Checking status again..."
+            $newStatus = (Get-Printer -Name $printer.Name).PrinterStatus
+            if ($newStatus -ne 'Offline') {
+                Write-Host "✅ Printer $($printer.Name) is now online."
+            } else {
+                Write-Host "❌ Printer $($printer.Name) is still offline."
+            }
+        }
       when: issue_type == "offline_status" or issue_type == "all"
 
-    # 8️⃣ Set Correct Default Printer
+    # 7️⃣ Set Correct Default Printer
     - name: Set Correct Default Printer
       win_shell: |
         $defaultPrinter = Get-Printer | Where-Object { $_.IsDefault -eq $true }
@@ -77,7 +90,7 @@
         }
       when: issue_type == "offline_status" or issue_type == "all"
 
-    # 9️⃣ Detect Installed Printer Model
+    # 8️⃣ Detect Installed Printer Model
     - name: Detect Installed Printer Model
       win_shell: |
         (Get-Printer | Select-Object -ExpandProperty DriverName) -join ', '
@@ -86,5 +99,5 @@
 
     - name: Debug - Show Installed Driver
       debug:
-        msg: "Installed Printer Driver: {{ installed_printer_driver.stdout | default('No driver information found') }}"
+        msg: "Installed Printer Driver: {{ installed_printer_driver.stdout }}"
       when: issue_type == "driver_update" or issue_type == "all"
