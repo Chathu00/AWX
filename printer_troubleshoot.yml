@@ -3,13 +3,13 @@
   gather_facts: no
 
   tasks:
-
-    # 🔍 1️⃣ Check Connection to Windows Server
+    # 1️⃣ Check Connection to Windows Server
     - name: Check Connection to Windows Server
       win_ping:
       register: connection_status
-      ignore_unreachable: yes  # Allows custom handling instead of immediate failure
+      ignore_unreachable: yes
 
+    # 2️⃣ Handle Connection Failure (Stop Execution if Unreachable)
     - name: Handle Connection Failure (Stop Execution if Unreachable)
       block:
         - name: Display Failure Message
@@ -21,53 +21,51 @@
               - Authentication failure due to incorrect credentials.
               - Firewall rules blocking WinRM access.
               - The server is down or experiencing issues."
-        
+
         - name: Stop Execution
           meta: end_play
       when: connection_status.unreachable is defined and connection_status.unreachable
 
+    # 3️⃣ Confirm Connection Success
     - name: Confirm Connection Success
       debug:
-        msg: "✅ Connected successfully to the Windows server. Starting troubleshooting..."
+        msg: "✅ Connected successfully to the Windows server. Proceeding with troubleshooting..."
 
-    # 🖨️ 2️⃣ Clear Stuck Print Jobs
+    # 4️⃣ Clear Stuck Print Jobs
     - name: Clear Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object { Remove-PrintJob -PrinterName $_.Name }
       when: issue_type == "stuck_jobs" or issue_type == "all"
       ignore_errors: yes
 
-    # 🔄 3️⃣ Restart Print Spooler Service
+    # 5️⃣ Restart Print Spooler Service
     - name: Restart Print Spooler Service
       win_service:
         name: Spooler
         state: restarted
       when: issue_type == "spooler_restart" or issue_type == "all"
 
-    # 🌐 4️⃣ Check Printer Connectivity (Optional)
+    # 6️⃣ Check Printer Connectivity
     - name: Check Printer Connectivity
       win_shell: |
-        if ("{{ printer_ip | default('') }}" -ne "") {
-          Test-Connection -ComputerName {{ printer_ip }} -Count 2
-        } else {
-          Write-Output "Skipping connectivity check: No printer IP provided."
-        }
+        $result = Test-Connection -ComputerName {{ printer_ip | default('localhost') }} -Count 2 -ErrorAction SilentlyContinue
+        if ($result) { $result | Out-String } else { "Connection failed" }
       register: ping_result
       when: issue_type == "connectivity" or issue_type == "all"
       ignore_errors: yes
 
     - name: Show Connectivity Result
       debug:
-        msg: "{{ ping_result.stdout_lines }}"
+        msg: "{{ ping_result.stdout | default('No output received') }}"
       when: issue_type == "connectivity" or issue_type == "all"
 
-    # ❌ 5️⃣ Fix Printer Showing Offline
+    # 7️⃣ Fix Printer Showing Offline
     - name: Fix Printer Showing Offline
       win_shell: |
         Get-Printer | ForEach-Object { Set-Printer -Name $_.Name -Online }
       when: issue_type == "offline_status" or issue_type == "all"
 
-    # 🎯 6️⃣ Set Correct Default Printer
+    # 8️⃣ Set Correct Default Printer
     - name: Set Correct Default Printer
       win_shell: |
         $defaultPrinter = Get-Printer | Where-Object { $_.IsDefault -eq $true }
@@ -79,7 +77,7 @@
         }
       when: issue_type == "offline_status" or issue_type == "all"
 
-    # 🔍 7️⃣ Detect Installed Printer Model
+    # 9️⃣ Detect Installed Printer Model
     - name: Detect Installed Printer Model
       win_shell: |
         (Get-Printer | Select-Object -ExpandProperty DriverName) -join ', '
@@ -88,5 +86,5 @@
 
     - name: Debug - Show Installed Driver
       debug:
-        msg: "Installed Printer Driver: {{ installed_printer_driver.stdout }}"
+        msg: "Installed Printer Driver: {{ installed_printer_driver.stdout | default('No driver information found') }}"
       when: issue_type == "driver_update" or issue_type == "all"
