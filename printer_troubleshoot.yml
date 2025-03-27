@@ -38,17 +38,29 @@
             Remove-PrintJob -PrinterName $_.Name -ID $_.ID 
           } 
         }
+      register: clear_jobs_result
       when: issue_type == "stuck_jobs" or issue_type == "all"
       ignore_errors: yes
+
+    - name: Debug - Print Job Clearing Status
+      debug:
+        msg: "🖨️ Cleared stuck print jobs successfully!"
+      when: issue_type == "stuck_jobs" or issue_type == "all" and clear_jobs_result is succeeded
 
     # 4️⃣ Restart Print Spooler Service
     - name: Restart Print Spooler Service
       win_service:
         name: Spooler
         state: restarted
+      register: spooler_restart
       when: issue_type == "spooler_restart" or issue_type == "all"
 
-    # 5️⃣ Fix Printer Showing Offline (Fixed Method)
+    - name: Debug - Print Spooler Restart Status
+      debug:
+        msg: "🔄 Print Spooler service restarted successfully!"
+      when: issue_type == "spooler_restart" or issue_type == "all" and spooler_restart is succeeded
+
+    # 5️⃣ Fix Printer Showing Offline
     - name: Fix Printer Showing Offline
       win_shell: |
         $printers = Get-Printer | Where-Object { $_.PrinterStatus -eq 'Offline' }
@@ -63,6 +75,12 @@
                 Write-Host "❌ Printer $($printer.Name) is still offline."
             }
         }
+      register: printer_offline_fix
+      when: issue_type == "offline_status" or issue_type == "all"
+
+    - name: Debug - Printer Offline Fix Status
+      debug:
+        msg: "📌 Printer offline issue checked and attempted to fix."
       when: issue_type == "offline_status" or issue_type == "all"
 
     # 6️⃣ Detect Installed Printer Model
@@ -74,5 +92,5 @@
 
     - name: Debug - Show Installed Driver
       debug:
-        msg: "Installed Printer Driver: {{ installed_printer_driver.stdout }}"
+        msg: "🔍 Installed Printer Driver(s): {{ installed_printer_driver.stdout }}"
       when: issue_type == "driver_update" or issue_type == "all"
