@@ -3,24 +3,55 @@
   gather_facts: no
 
   tasks:
-    # 1️⃣ Clear Stuck Print Jobs
+
+    # 🔍 1️⃣ Check Connection to Windows Server
+    - name: Check Connection to Windows Server
+      win_ping:
+      register: connection_status
+      ignore_unreachable: yes  # Allows custom handling instead of immediate failure
+
+    - name: Handle Connection Failure (Stop Execution if Unreachable)
+      block:
+        - name: Display Failure Message
+          debug:
+            msg: >
+              "❌ Failed to connect to the Windows server. Possible reasons:
+              - Incorrect IP address or unreachable network.
+              - WinRM service is not running on the target machine.
+              - Authentication failure due to incorrect credentials.
+              - Firewall rules blocking WinRM access.
+              - The server is down or experiencing issues."
+        
+        - name: Stop Execution
+          meta: end_play
+      when: connection_status.unreachable is defined and connection_status.unreachable
+
+    - name: Confirm Connection Success
+      debug:
+        msg: "✅ Connected successfully to the Windows server. Starting troubleshooting..."
+
+    # 🖨️ 2️⃣ Clear Stuck Print Jobs
     - name: Clear Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object { Remove-PrintJob -PrinterName $_.Name }
       when: issue_type == "stuck_jobs" or issue_type == "all"
       ignore_errors: yes
 
-    # 2️⃣ Restart Print Spooler Service
+    # 🔄 3️⃣ Restart Print Spooler Service
     - name: Restart Print Spooler Service
       win_service:
         name: Spooler
         state: restarted
       when: issue_type == "spooler_restart" or issue_type == "all"
 
-    # 3️⃣ Check Printer Connectivity
+    # 🌐 4️⃣ Check Printer Connectivity (Optional)
     - name: Check Printer Connectivity
       win_shell: |
-        Test-Connection -ComputerName {{ printer_ip }} -Count 2
+        if ("{{ printer_ip | default('') }}" -ne "") {
+          Test-Connection -ComputerName {{ printer_ip }} -Count 2
+        } else {
+          Write-Output "Skipping connectivity check: No printer IP provided."
+        }
       register: ping_result
       when: issue_type == "connectivity" or issue_type == "all"
       ignore_errors: yes
@@ -30,13 +61,13 @@
         msg: "{{ ping_result.stdout_lines }}"
       when: issue_type == "connectivity" or issue_type == "all"
 
-    # 4️⃣ Fix Printer Showing Offline
+    # ❌ 5️⃣ Fix Printer Showing Offline
     - name: Fix Printer Showing Offline
       win_shell: |
         Get-Printer | ForEach-Object { Set-Printer -Name $_.Name -Online }
       when: issue_type == "offline_status" or issue_type == "all"
 
-    # 5️⃣ Set Correct Default Printer
+    # 🎯 6️⃣ Set Correct Default Printer
     - name: Set Correct Default Printer
       win_shell: |
         $defaultPrinter = Get-Printer | Where-Object { $_.IsDefault -eq $true }
@@ -48,7 +79,7 @@
         }
       when: issue_type == "offline_status" or issue_type == "all"
 
-    # 6️⃣ Detect Installed Printer Model
+    # 🔍 7️⃣ Detect Installed Printer Model
     - name: Detect Installed Printer Model
       win_shell: |
         (Get-Printer | Select-Object -ExpandProperty DriverName) -join ', '
@@ -59,34 +90,3 @@
       debug:
         msg: "Installed Printer Driver: {{ installed_printer_driver.stdout }}"
       when: issue_type == "driver_update" or issue_type == "all"
-
-    # 7️⃣ Install Missing Printer Driver
-    - name: Install Missing Printer Driver (from Network Share or Local Repository)
-      win_shell: |
-        $printerModel = (Get-Printer | Select-Object -ExpandProperty DriverName) -join ', '
-
-        if ($printerModel -like "*HP*") {
-          $driverPath = "\\fileserver\drivers\hp_driver.exe"
-          $localDriverPath = "C:\Drivers\hp_driver.exe"
-        } elseif ($printerModel -like "*Canon*") {
-          $driverPath = "\\fileserver\drivers\canon_driver.exe"
-          $localDriverPath = "C:\Drivers\canon_driver.exe"
-        } else {
-          $driverPath = "\\fileserver\drivers\generic_driver.exe"
-          $localDriverPath = "C:\Drivers\generic_driver.exe"
-        }
-
-        if (Test-Path $driverPath) {
-          Copy-Item -Path $driverPath -Destination "C:\Temp\printer_driver.exe"
-          $driverToInstall = "C:\Temp\printer_driver.exe"
-        } elseif (Test-Path $localDriverPath) {
-          Copy-Item -Path $localDriverPath -Destination "C:\Temp\printer_driver.exe"
-          $driverToInstall = "C:\Temp\printer_driver.exe"
-        } else {
-          Write-Output "Driver file not found on network share or local repository"
-          exit 1
-        }
-
-        Start-Process -FilePath $driverToInstall -ArgumentList "/S" -Wait
-      when: issue_type == "driver_update" or issue_type == "all"
-      ignore_errors: yes
