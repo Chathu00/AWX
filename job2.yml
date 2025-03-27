@@ -49,7 +49,7 @@
 
     - name: Close Incident in ServiceNow (if card_number is provided)
       uri:
-        url: "https://your-servicenow-instance/api/now/table/incident/{{ card_number }}"
+        url: ""https://dev262979.service-now.com/api/now/table/incident/{{ card_number }}"
         method: PATCH
         headers:
           Content-Type: "application/json"
