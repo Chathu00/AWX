@@ -1,40 +1,11 @@
-- name: Identify High CPU and Memory Consuming Processes & Close Incident in ServiceNow
+- name: Identify High CPU and Memory Consuming Processes
   hosts: winserverhost
   gather_facts: no
 
   vars:
     card_number: "{{ card_number | default('') | trim }}"  # Passed from AWX
-    servicenow_instance: "https://dev262979.service-now.com"
-    servicenow_username: "LavanyaR"
-    servicenow_password: "7@%C$4c{"  # ❗ Recommendation: Use Ansible Vault instead of plaintext
 
   tasks:
-    # 🔹 Step 1: Check Connection to Windows Server
-    - name: Check Connection to Windows Server
-      win_ping:
-      register: connection_status
-      ignore_unreachable: yes  # Prevents immediate failure
-
-    - name: Handle Connection Failure
-      block:
-        - name: Display Failure Message
-          debug:
-            msg: >
-              "❌ Failed to connect to the Windows server. Possible reasons:
-              - Incorrect IP or unreachable network.
-              - WinRM service not running.
-              - Incorrect credentials.
-              - Firewall blocking WinRM access.
-              - The server is down."
-        - name: Stop Execution
-          meta: end_play
-      when: connection_status.unreachable is defined and connection_status.unreachable
-
-    - name: Confirm Connection Success
-      debug:
-        msg: "✅ Connected successfully to the Windows server. Fetching process details..."
-
-    # 🔹 Step 2: Fetch High CPU & Memory Consuming Processes
     - name: Fetch top CPU and memory-consuming processes
       win_shell: |
         $cpuProcesses = Get-Process | Sort-Object -Descending CPU | Select-Object -First 5 |
@@ -52,33 +23,18 @@
       debug:
         msg: "{{ process_output.stdout_lines }}"
 
-    # 🔹 Step 3: Fetch logs from the server
-    - name: Fetch logs from the server
-      win_shell: Get-Content "{{ remote_log_path }}" -Tail 50 | Out-File "{{ retrieved_log_path }}"
-      register: log_output
-
-    - name: Display retrieved logs
-      debug:
-        msg: "{{ log_output.stdout_lines | default(['No logs retrieved.']) }}"
-
-    # 🔹 Step 4: Kill Process (if confirmed)
-    - name: Kill Process (if confirmed)
-      win_shell: Stop-Process -Id {{ process_id }} -Force
-      when: confirm_kill | lower == "yes"
-
-    # 🔹 Step 5: Close Incident in ServiceNow (if card_number is provided)
-    - name: Close Incident in ServiceNow
+    - name: Close Incident in ServiceNow (if card_number is provided)
       uri:
-        url: "{{ servicenow_instance }}/api/now/table/incident/{{ card_number }}"
+        url: "https://dev262979.service-now.com/api/now/table/incident/{{ card_number }}"
         method: PATCH
         headers:
           Content-Type: "application/json"
-        user: "{{ servicenow_username }}"
-        password: "{{ servicenow_password }}"
+        user: "LavanyaR"
+        password: "7@%C$4c{"
         force_basic_auth: yes
         body: 
           state: "Resolved"
           close_notes: "High CPU/memory issue resolved by automation."
         body_format: json
         status_code: 200, 204
-      when: card_number | length > 0
+      when: card_number is defined and card_number | trim | length > 0
