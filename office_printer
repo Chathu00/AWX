@@ -1,0 +1,122 @@
+- name: Office Printer Automation
+  hosts: windows_host
+  gather_facts: no
+  vars_prompt:
+    - name: printer_name
+      prompt: "Enter the printer name"
+      private: no
+
+    - name: printer_ip
+      prompt: "Enter the printer IP if not auto-detected"
+      private: no
+
+  tasks:
+    # 1️⃣ Check if the user is connected to secure Wi-Fi
+    - name: Check if user is connected to secure Wi-Fi
+      win_shell: |
+        (Get-NetAdapter -InterfaceAlias Wi-Fi | Get-NetIPConfiguration).IPv4Address.IPAddress
+      register: wifi_ip
+
+    - name: Debug - Display Wi-Fi Connection Status
+      debug:
+        msg: "🔍 User is connected to Wi-Fi with IP: {{ wifi_ip.stdout }}"
+
+    # 2️⃣ Check if the printer IP is listed in Ports
+    - name: Check if printer IP is in ports
+      win_shell: |
+        Get-PrinterPort | Select-String "{{ printer_ip }}"
+      register: printer_port_check
+      ignore_errors: yes
+
+    - name: Ask for printer IP if not found in ports
+      pause:
+        prompt: "⚠️ Printer IP not found in ports. Please enter the correct printer IP:"
+      register: new_printer_ip
+      when: printer_port_check.stdout == ""
+
+    - name: Set printer IP if entered manually
+      set_fact:
+        printer_ip: "{{ new_printer_ip.user_input }}"
+      when: printer_port_check.stdout == ""
+
+    - name: Debug - Printer IP Confirmation
+      debug:
+        msg: "✅ Printer IP set to: {{ printer_ip }}"
+
+    # 3️⃣ Detect Installed Printer Driver
+    - name: Detect Installed Printer Driver
+      win_shell: |
+        Get-PrinterDriver | Select-Object Name
+      register: installed_driver
+
+    - name: Debug - Installed Printer Driver
+      debug:
+        msg: "🔍 Installed Printer Driver(s): {{ installed_driver.stdout }}"
+
+    # 4️⃣ Install printer using IP and detected driver
+    - name: Install printer using IP and detected driver
+      win_shell: |
+        $PrinterIP = "{{ printer_ip }}"
+        $PrinterName = "{{ printer_name }}"
+        $DriverName = "{{ installed_driver.stdout_lines[0] }}"
+        Add-Printer -Name $PrinterName -DriverName $DriverName -PortName $PrinterIP
+      register: printer_setup
+
+    - name: Debug - Printer Setup Status
+      debug:
+        msg: "🖨️ Printer '{{ printer_name }}' has been set up successfully with IP: {{ printer_ip }}"
+
+    # 5️⃣ Check if the printer is set as default
+    - name: Check if printer is default
+      win_shell: |
+        (Get-Printer -Name "{{ printer_name }}").IsDefault
+      register: is_default
+
+    - name: Debug - Printer Default Status
+      debug:
+        msg: "✅ Printer '{{ printer_name }}' is set as default."
+      when: is_default.stdout == "True"
+
+    # 6️⃣ Remove stuck print jobs and download files to device
+    - name: Remove stuck print jobs
+      win_shell: |
+        $jobs = Get-PrintJob -PrinterName "{{ printer_name }}" | Where-Object { $_.JobStatus -match "Error" }
+        foreach ($job in $jobs) {
+            $job | Remove-PrintJob -Confirm:$false
+        }
+      register: remove_jobs
+
+    - name: Download print jobs before deletion
+      win_shell: |
+        $PrintJobPath = "C:\Users\Public\Documents\FailedPrintJobs"
+        if (!(Test-Path $PrintJobPath)) { New-Item -ItemType Directory -Path $PrintJobPath }
+        Get-PrintJob -PrinterName "{{ printer_name }}" | Export-Clixml "$PrintJobPath\StuckJobs.xml"
+      when: remove_jobs.changed
+
+    - name: Debug - Print Job Removal Status
+      debug:
+        msg: "🚀 Stuck print jobs removed and stored at C:\Users\Public\Documents\FailedPrintJobs\StuckJobs.xml"
+
+    # 7️⃣ Make Printer Online if it's showing Offline
+    - name: Check if printer is offline
+      win_shell: |
+        (Get-Printer -Name "{{ printer_name }}").PrinterStatus
+      register: printer_status
+
+    - name: Bring printer online if offline
+      win_shell: |
+        Restart-Service Spooler
+        Start-Sleep -Seconds 5
+        Write-Host "Checking status again..."
+        $newStatus = (Get-Printer -Name "{{ printer_name }}").PrinterStatus
+        if ($newStatus -ne "Offline") {
+            Write-Host "✅ Printer is now online."
+        } else {
+            Write-Host "❌ Printer is still offline."
+        }
+      when: printer_status.stdout == "Offline"
+
+    - name: Debug - Printer Online Status
+      debug:
+        msg: "✅ Printer '{{ printer_name }}' is now online."
+      when: printer_status.stdout == "Offline"
