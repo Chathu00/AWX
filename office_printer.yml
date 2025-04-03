@@ -2,15 +2,12 @@
   hosts: windows_host
   gather_facts: no
 
-  vars_prompt:
-    - name: printer_ip
-      prompt: "Enter Printer IP if not auto-detected:"
-      private: no
-    - name: printer_name
-      prompt: "Enter Printer Name:"
-      private: no
+  vars:
+    printer_name: ""  # To be set dynamically
+    printer_ip: ""    # To be set dynamically
 
   tasks:
+
     # 1️⃣ Check if the user is connected to secure Wi-Fi
     - name: Get Wi-Fi Connection Details
       win_shell: |
@@ -23,7 +20,7 @@
         msg: "🔍 User is connected to Wi-Fi: {{ wifi_status.stdout }}"
       when: wifi_status.stdout | length > 0
 
-    # 2️⃣ Check if printer IP is in ports
+    # 2️⃣ Check if printer IP is in configured ports
     - name: Get Printer Ports
       win_shell: |
         Get-PrinterPort | Select-Object -ExpandProperty Name
@@ -66,7 +63,7 @@
         - name: Debug - Printer Drivers Updated
           debug:
             msg: "📢 Printer drivers updated successfully."
-          when: driver_update_result.rc == 0
+          when: driver_update_result is succeeded
 
         - name: Check Printer Firmware Version
           win_shell: |
@@ -86,9 +83,9 @@
     - name: Debug - Printer Setup Status
       debug:
         msg: "🖨️ Printer '{{ printer_name }}' has been set up successfully with IP: {{ printer_ip }}"
-      when: printer_install_result.rc == 0
+      when: printer_install_result is succeeded
 
-    # 5️⃣ Check if the printer is set as default
+    # 5️⃣ Check if printer is set as default
     - name: Get Default Printer
       win_shell: |
         (Get-Printer | Where-Object { $_.IsDefault -eq $true }).Name
@@ -97,7 +94,7 @@
     - name: Set Printer as Default if Not Already
       win_shell: |
         Set-Printer -Name "{{ printer_name }}" -IsDefault $true
-      when: printer_name not in default_printer.stdout_lines
+      when: printer_name not in default_printer.stdout
 
     - name: Debug - Printer Default Status
       debug:
@@ -122,7 +119,7 @@
 
     - name: Save Stuck Print Jobs to File
       win_shell: |
-        $outputPath = "C:\Users\Public\Documents\FailedPrintJobs\StuckJobs.xml"
+        $outputPath = "C:\\Users\\Public\\Documents\\FailedPrintJobs\\StuckJobs.xml"
         $stuckJobs = Get-Printer | ForEach-Object { 
           Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" }
         }
@@ -131,7 +128,7 @@
 
     - name: Debug - Stuck Jobs Cleared and Saved
       debug:
-        msg: "🚀 Stuck print jobs removed and stored at C:\Users\Public\Documents\FailedPrintJobs\StuckJobs.xml"
+        msg: "🚀 Stuck print jobs removed and stored at C:\\Users\\Public\\Documents\\FailedPrintJobs\\StuckJobs.xml"
 
     # 7️⃣ Ensure Printer is Online
     - name: Get Printer Online Status
@@ -142,9 +139,9 @@
     - name: Bring Printer Online
       win_shell: |
         Restart-Service Spooler
-      when: '"Offline" in printer_status.stdout'
+      when: "'Offline' in printer_status.stdout"
 
     - name: Debug - Printer Online Status
       debug:
         msg: "✅ Printer '{{ printer_name }}' is now online."
-      when: '"Offline" not in printer_status.stdout'
+      when: "'Offline' not in printer_status.stdout"
