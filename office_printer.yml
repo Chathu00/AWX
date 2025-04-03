@@ -2,6 +2,14 @@
   hosts: windows_host
   gather_facts: no
 
+  vars_prompt:
+    - name: printer_ip
+      prompt: "Enter Printer IP if not auto-detected:"
+      private: no
+    - name: printer_name
+      prompt: "Enter Printer Name:"
+      private: no
+
   tasks:
     # 1️⃣ Check if the user is connected to secure Wi-Fi
     - name: Get Wi-Fi Connection Details
@@ -58,7 +66,7 @@
         - name: Debug - Printer Drivers Updated
           debug:
             msg: "📢 Printer drivers updated successfully."
-          when: driver_update_result is succeeded
+          when: driver_update_result.rc == 0
 
         - name: Check Printer Firmware Version
           win_shell: |
@@ -78,7 +86,7 @@
     - name: Debug - Printer Setup Status
       debug:
         msg: "🖨️ Printer '{{ printer_name }}' has been set up successfully with IP: {{ printer_ip }}"
-      when: printer_install_result is succeeded
+      when: printer_install_result.rc == 0
 
     # 5️⃣ Check if the printer is set as default
     - name: Get Default Printer
@@ -89,7 +97,7 @@
     - name: Set Printer as Default if Not Already
       win_shell: |
         Set-Printer -Name "{{ printer_name }}" -IsDefault $true
-      when: printer_name not in default_printer.stdout
+      when: printer_name not in default_printer.stdout_lines
 
     - name: Debug - Printer Default Status
       debug:
@@ -134,9 +142,9 @@
     - name: Bring Printer Online
       win_shell: |
         Restart-Service Spooler
-      when: "'Offline' in printer_status.stdout"
+      when: '"Offline" in printer_status.stdout'
 
     - name: Debug - Printer Online Status
       debug:
         msg: "✅ Printer '{{ printer_name }}' is now online."
-      when: "'Offline' not in printer_status.stdout"
+      when: '"Offline" not in printer_status.stdout'
