@@ -3,12 +3,12 @@
   gather_facts: no
 
   vars:
-    printer_name: ""  # To be set dynamically
-    printer_ip: ""    # To be set dynamically
+    printer_name: "OfficePrinter123"  # Printer name (to be updated per setup)
+    printer_ip: ""  # Auto-detected, no manual input
 
   tasks:
 
-    # 1️⃣ Check if the user is connected to secure Wi-Fi
+    # 1️⃣ ✅ Check if the User is Connected to Secure Wi-Fi
     - name: Get Wi-Fi Connection Details
       win_shell: |
         (Get-NetAdapter -InterfaceDescription "*Wireless*").InterfaceAlias
@@ -20,29 +20,34 @@
         msg: "🔍 User is connected to Wi-Fi: {{ wifi_status.stdout }}"
       when: wifi_status.stdout | length > 0
 
-    # 2️⃣ Check if printer IP is in configured ports
+    # 2️⃣ ✅ Check if Printer IP is in Configured Ports
     - name: Get Printer Ports
       win_shell: |
         Get-PrinterPort | Select-Object -ExpandProperty Name
       register: printer_ports
 
-    - name: Debug - Check Printer IP in Ports
+    - name: Debug - Show Available Printer Ports
       debug:
-        msg: "✅ Printer IP {{ printer_ip }} is found in configured ports."
-      when: printer_ip in printer_ports.stdout_lines
+        msg: "🔍 Available Printer Ports: {{ printer_ports.stdout_lines }}"
 
-    - name: Prompt for Printer IP if Not Found
-      pause:
-        prompt: "❌ Printer IP not found in ports. Please enter the printer IP manually:"
-      register: manual_printer_ip
-      when: printer_ip not in printer_ports.stdout_lines
-
-    - name: Set Printer IP from Manual Input
+    # 3️⃣ ✅ Auto-detect Printer IP if Found in Ports
+    - name: Set Printer IP if Found in Ports
       set_fact:
-        printer_ip: "{{ manual_printer_ip.user_input }}"
-      when: manual_printer_ip.user_input is defined
+        printer_ip: "{{ item }}"
+      loop: "{{ printer_ports.stdout_lines }}"
+      when: item | regex_search('192\.168\.\d+\.\d+')  # Adjust regex if needed
 
-    # 3️⃣ Update Printer and Drivers
+    - name: Debug - Detected Printer IP
+      debug:
+        msg: "📌 Printer IP detected: {{ printer_ip }}"
+
+    # 4️⃣ ❌ Fail if Printer IP is Not Found (No Manual Input)
+    - name: Stop Execution if No Printer IP
+      fail:
+        msg: "❌ Printer IP could not be determined! Please check network settings."
+      when: printer_ip | length == 0
+
+    # 5️⃣ ✅ Update Printer and Drivers
     - name: Update Printer and Drivers
       block:
         - name: Detect Installed Printer Drivers
@@ -74,10 +79,10 @@
           debug:
             msg: "🔍 Current Printer Firmware Version: {{ printer_firmware.stdout }}"
 
-    # 4️⃣ Install the printer using IP and driver
+    # 6️⃣ ✅ Install the Printer
     - name: Add Printer with IP
       win_shell: |
-        Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "{{ installed_printer_driver.stdout }}"
+        Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "Microsoft IPP Class Driver"
       register: printer_install_result
 
     - name: Debug - Printer Setup Status
@@ -85,7 +90,7 @@
         msg: "🖨️ Printer '{{ printer_name }}' has been set up successfully with IP: {{ printer_ip }}"
       when: printer_install_result is succeeded
 
-    # 5️⃣ Check if printer is set as default
+    # 7️⃣ ✅ Check if Printer is Set as Default
     - name: Get Default Printer
       win_shell: |
         (Get-Printer | Where-Object { $_.IsDefault -eq $true }).Name
@@ -100,7 +105,7 @@
       debug:
         msg: "✅ Printer '{{ printer_name }}' is set as the default printer."
 
-    # 6️⃣ Remove Stuck Print Jobs and Download Files
+    # 8️⃣ ✅ Remove Stuck Print Jobs and Download Files
     - name: Find Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object { 
@@ -130,7 +135,7 @@
       debug:
         msg: "🚀 Stuck print jobs removed and stored at C:\\Users\\Public\\Documents\\FailedPrintJobs\\StuckJobs.xml"
 
-    # 7️⃣ Ensure Printer is Online
+    # 9️⃣ ✅ Ensure Printer is Online
     - name: Get Printer Online Status
       win_shell: |
         (Get-Printer -Name "{{ printer_name }}").PrinterStatus
