@@ -2,17 +2,13 @@
   hosts: windows_host
   gather_facts: no
 
-  vars_prompt:
-    - name: printer_ip
-      prompt: "Enter the Printer IP (e.g., 192.168.1.100)"
-      private: no
-
-    - name: printer_name
-      prompt: "Enter the Printer Name (e.g., Office_HP_Printer)"
-      private: no
+  vars:
+    printer_name: "OfficePrinter1"
+    printer_ip: "192.168.1.50"  # Replace with default IP or update via set_fact
 
   tasks:
 
+    # 1️⃣ Check if the user is connected to secure Wi-Fi
     - name: Get Wi-Fi Connection Details
       win_shell: |
         (Get-NetAdapter -InterfaceDescription "*Wireless*").InterfaceAlias
@@ -24,6 +20,7 @@
         msg: "🔍 User is connected to Wi-Fi: {{ wifi_status.stdout }}"
       when: wifi_status.stdout | length > 0
 
+    # 2️⃣ Check if printer IP is in configured ports
     - name: Get Printer Ports
       win_shell: |
         Get-PrinterPort | Select-Object -ExpandProperty Name
@@ -44,10 +41,10 @@
       debug:
         msg: "{{ installed_drivers.stdout_lines }}"
 
-    - name: Reinstall Printer Drivers
+    - name: Remove Old Printer Drivers
       win_shell: |
-        Get-PrinterDriver | ForEach-Object { 
-          pnputil /delete-driver $_.Name /force
+        Get-PrinterDriver | ForEach-Object {
+          pnputil /delete-driver "$($_.Name)" /force
         }
       register: driver_removal_result
       ignore_errors: yes
@@ -58,23 +55,23 @@
       register: driver_install_result
       ignore_errors: yes
 
-    - name: Debug - Printer Drivers Updated
+    - name: Debug - Printer Drivers Reinstalled
       debug:
         msg: "📢 Printer drivers reinstalled successfully."
 
     # 4️⃣ Install the printer using IP and driver
     - name: Add Printer with IP
       win_shell: |
-        Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "Your Installed Driver Name Here"
+        Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "Generic / Text Only"
       register: printer_install_result
       ignore_errors: yes
 
     - name: Debug - Printer Setup Status
       debug:
         msg: "🖨️ Printer '{{ printer_name }}' has been set up successfully with IP: {{ printer_ip }}"
-      when: printer_install_result.rc == 0
+      when: printer_install_result is succeeded
 
-    # 5️⃣ Set as Default
+    # 5️⃣ Set Default Printer
     - name: Get Default Printer
       win_shell: |
         (Get-Printer | Where-Object { $_.IsDefault -eq $true }).Name
@@ -82,34 +79,34 @@
 
     - name: Set Printer as Default if Not Already
       win_shell: |
-        Set-Printer -Name "{{ printer_name }}" -IsDefault $true
+        Set-DefaultPrinter -Name "{{ printer_name }}"
       when: printer_name not in default_printer.stdout
 
     - name: Debug - Printer Default Status
       debug:
         msg: "✅ Printer '{{ printer_name }}' is set as the default printer."
 
-    # 6️⃣ Remove Stuck Print Jobs
+    # 6️⃣ Remove Stuck Print Jobs and Save to File
     - name: Find Stuck Print Jobs
       win_shell: |
-        Get-Printer | ForEach-Object { 
+        Get-Printer | ForEach-Object {
           Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" }
         }
       register: stuck_jobs
 
     - name: Remove Stuck Print Jobs
       win_shell: |
-        Get-Printer | ForEach-Object { 
-          Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" } | ForEach-Object { 
-            Remove-PrintJob -PrinterName $_.Name -ID $_.ID 
-          } 
+        Get-Printer | ForEach-Object {
+          Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" } | ForEach-Object {
+            Remove-PrintJob -PrinterName $_.Name -ID $_.ID
+          }
         }
       when: stuck_jobs.stdout | length > 0
 
     - name: Save Stuck Print Jobs to File
       win_shell: |
         $outputPath = "C:\\Users\\Public\\Documents\\FailedPrintJobs\\StuckJobs.xml"
-        $stuckJobs = Get-Printer | ForEach-Object { 
+        $stuckJobs = Get-Printer | ForEach-Object {
           Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" }
         }
         $stuckJobs | Export-Clixml -Path $outputPath
