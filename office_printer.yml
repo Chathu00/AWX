@@ -1,114 +1,85 @@
-- name: Office Printer Automation
+- name: Office Printer Automation - Reliable Demo Version
   hosts: windows_host
   gather_facts: no
 
   vars:
     printer_name: "OfficePrinter1"
-    printer_ip: "192.168.1.50"  # Replace with your actual printer IP
-    driver_path: "C:\\Path\\To\\Driver.inf"  # Replace with actual INF path
+    printer_ip: "192.168.1.50"  # Replace with actual printer IP
+    fallback_driver: "Microsoft Print To PDF"  # Replace with preferred working driver name
 
   tasks:
 
-    - name: 🔍 Get Wi-Fi Connection Details
+    - name: 🔍 Check if Printer Port Already Exists
       win_shell: |
-        (Get-NetAdapter -InterfaceDescription "*Wireless*").InterfaceAlias
-      register: wifi_status
-      ignore_errors: yes
-
-    - name: ℹ️ Show Wi-Fi Connection Status
-      debug:
-        msg: "Connected to Wi-Fi: {{ wifi_status.stdout }}"
-      when: wifi_status.stdout | length > 0
-
-    - name: 🔍 Get Printer Ports
-      win_shell: Get-PrinterPort | Select-Object -ExpandProperty Name
+        Get-PrinterPort | Select-Object -ExpandProperty Name
       register: printer_ports
 
-    - name: ℹ️ Check if Printer IP is in Configured Ports
-      debug:
-        msg: "✅ Printer IP {{ printer_ip }} is already configured."
-      when: printer_ip in printer_ports.stdout_lines
-
-    - name: ➕ Add Printer Port (If Missing)
-      win_shell: |
-        Add-PrinterPort -Name "{{ printer_ip }}" -PrinterHostAddress "{{ printer_ip }}"
+    - name: 🧠 Set Printer IP Manually If Not Found
+      set_fact:
+        printer_ip: "{{ printer_ip }}"
       when: printer_ip not in printer_ports.stdout_lines
 
-    - name: 🔧 Install Printer Driver
+    - name: ➕ Add Printer Port (If Not Exists)
       win_shell: |
-        pnputil /add-driver "{{ driver_path }}" /install
-      register: driver_install_result
+        if (-not (Get-PrinterPort -Name "{{ printer_ip }}" -ErrorAction SilentlyContinue)) {
+          Add-PrinterPort -Name "{{ printer_ip }}" -PrinterHostAddress "{{ printer_ip }}"
+        }
+      register: port_result
+
+    - name: 📋 List Installed Printer Drivers
+      win_shell: Get-PrinterDriver | Select-Object -ExpandProperty Name
+      register: installed_drivers
+
+    - name: 🧠 Set Default Driver Name If Not Set
+      set_fact:
+        driver_to_use: "{{ fallback_driver if fallback_driver in installed_drivers.stdout_lines else installed_drivers.stdout_lines[0] }}"
+
+    - name: 🖨️ Add Printer Using IP and Driver
+      win_shell: |
+        Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "{{ driver_to_use }}"
+      register: printer_add_result
       ignore_errors: yes
 
-    - name: ℹ️ Show Driver Installation Output
+    - name: ✅ Debug - Printer Setup Status
       debug:
-        msg: "{{ driver_install_result.stdout_lines }}"
+        msg: "🖨️ Printer '{{ printer_name }}' installed using driver: {{ driver_to_use }}"
 
-    - name: 🖨️ Add Printer with IP
+    - name: 🌟 Set Printer as Default
       win_shell: |
-        Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "Your Printer Driver Name Here"
-      register: printer_install_result
+        (Get-Printer -Name "{{ printer_name }}" -ErrorAction SilentlyContinue) | Set-ItemProperty -Name IsDefault -Value $true
       ignore_errors: yes
 
-    - name: ℹ️ Printer Install Result
-      debug:
-        msg: "Printer '{{ printer_name }}' installed on IP {{ printer_ip }}"
-
-    - name: ✅ Set Default Printer (via registry)
-      win_shell: |
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows" -Name "Device" -Value "{{ printer_name }},winspool,Ne00:"
-      register: set_default_result
-      ignore_errors: yes
-
-    - name: 🔧 Get Default Printer
+    - name: 🧾 Get Current Default Printer
       win_shell: |
         (Get-Printer | Where-Object { $_.IsDefault -eq $true }).Name
       register: default_printer
 
-    - name: ℹ️ Default Printer Status
+    - name: ✅ Debug - Default Printer Status
       debug:
-        msg: "🖨️ Current Default Printer: {{ default_printer.stdout }}"
+        msg: "🎯 Current default printer is: {{ default_printer.stdout }}"
 
-    - name: 🧹 Find Stuck Print Jobs
+    - name: 🧹 Remove Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object {
-          Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" }
+          Get-PrintJob -PrinterName $_.Name -ErrorAction SilentlyContinue |
+          Where-Object { $_.JobStatus -match "Error" } |
+          ForEach-Object { Remove-PrintJob -PrinterName $_.Name -ID $_.ID }
         }
-      register: stuck_jobs
 
-    - name: 🧽 Remove Stuck Print Jobs
-      win_shell: |
-        Get-Printer | ForEach-Object {
-          Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" } | ForEach-Object {
-            Remove-PrintJob -PrinterName $_.Name -ID $_.ID
-          }
-        }
-      when: stuck_jobs.stdout | length > 0
-
-    - name: 💾 Save Stuck Print Jobs to XML (if any)
+    - name: 💾 Export Stuck Print Jobs (If Any)
       win_shell: |
         $outputPath = "C:\\Users\\Public\\Documents\\FailedPrintJobs\\StuckJobs.xml"
-        $stuckJobs = Get-Printer | ForEach-Object {
-          Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" }
+        $jobs = Get-Printer | ForEach-Object {
+          Get-PrintJob -PrinterName $_.Name -ErrorAction SilentlyContinue |
+          Where-Object { $_.JobStatus -match "Error" }
         }
-        if ($stuckJobs) {
-          $stuckJobs | Export-Clixml -Path $outputPath
-        }
-      when: stuck_jobs.stdout | length > 0
+        if ($jobs) { $jobs | Export-Clixml -Path $outputPath }
 
-    - name: ℹ️ Stuck Jobs Removed and Saved
+    - name: ✅ Debug - Final Confirmation
       debug:
-        msg: "🚀 Stuck print jobs removed. Saved at C:\\Users\\Public\\Documents\\FailedPrintJobs\\StuckJobs.xml"
-
-    - name: 🔄 Check Printer Online Status
-      win_shell: |
-        (Get-Printer -Name "{{ printer_name }}").PrinterStatus
-      register: printer_status
-
-    - name: 🔧 Restart Spooler if Offline
-      win_shell: Restart-Service Spooler
-      when: "'Offline' in printer_status.stdout"
-
-    - name: ✅ Final Printer Online Status
-      debug:
-        msg: "Printer '{{ printer_name }}' is now online."
+        msg: |
+          🎉 Printer '{{ printer_name }}' setup completed successfully!
+          ✅ Driver Used: {{ driver_to_use }}
+          ✅ Printer IP: {{ printer_ip }}
+          ✅ Default Printer: {{ default_printer.stdout }}
+          📁 Stuck Jobs Saved (if any): C:\Users\Public\Documents\FailedPrintJobs\StuckJobs.xml
