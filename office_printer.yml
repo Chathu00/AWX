@@ -2,13 +2,17 @@
   hosts: windows_host
   gather_facts: no
 
-  vars:
-    printer_name: ""  # To be set dynamically
-    printer_ip: ""    # To be set dynamically
+  vars_prompt:
+    - name: printer_ip
+      prompt: "Enter the Printer IP (e.g., 192.168.1.100)"
+      private: no
+
+    - name: printer_name
+      prompt: "Enter the Printer Name (e.g., Office_HP_Printer)"
+      private: no
 
   tasks:
 
-    # 1️⃣ Check if the user is connected to secure Wi-Fi
     - name: Get Wi-Fi Connection Details
       win_shell: |
         (Get-NetAdapter -InterfaceDescription "*Wireless*").InterfaceAlias
@@ -20,7 +24,6 @@
         msg: "🔍 User is connected to Wi-Fi: {{ wifi_status.stdout }}"
       when: wifi_status.stdout | length > 0
 
-    # 2️⃣ Check if printer IP is in configured ports
     - name: Get Printer Ports
       win_shell: |
         Get-PrinterPort | Select-Object -ExpandProperty Name
@@ -30,17 +33,6 @@
       debug:
         msg: "✅ Printer IP {{ printer_ip }} is found in configured ports."
       when: printer_ip in printer_ports.stdout_lines
-
-    - name: Prompt for Printer IP if Not Found
-      pause:
-        prompt: "❌ Printer IP not found in ports. Please enter the printer IP manually:"
-      register: manual_printer_ip
-      when: printer_ip not in printer_ports.stdout_lines
-
-    - name: Set Printer IP from Manual Input
-      set_fact:
-        printer_ip: "{{ manual_printer_ip.user_input }}"
-      when: manual_printer_ip.user_input is defined
 
     # 3️⃣ Update Printer and Drivers
     - name: List Installed Drivers
@@ -73,15 +65,16 @@
     # 4️⃣ Install the printer using IP and driver
     - name: Add Printer with IP
       win_shell: |
-        Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "{{ installed_drivers.stdout }}"
+        Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "Your Installed Driver Name Here"
       register: printer_install_result
+      ignore_errors: yes
 
     - name: Debug - Printer Setup Status
       debug:
         msg: "🖨️ Printer '{{ printer_name }}' has been set up successfully with IP: {{ printer_ip }}"
-      when: printer_install_result is succeeded
+      when: printer_install_result.rc == 0
 
-    # 5️⃣ Check if printer is set as default
+    # 5️⃣ Set as Default
     - name: Get Default Printer
       win_shell: |
         (Get-Printer | Where-Object { $_.IsDefault -eq $true }).Name
@@ -96,7 +89,7 @@
       debug:
         msg: "✅ Printer '{{ printer_name }}' is set as the default printer."
 
-    # 6️⃣ Remove Stuck Print Jobs and Download Files
+    # 6️⃣ Remove Stuck Print Jobs
     - name: Find Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object { 
