@@ -1,4 +1,4 @@
-- name: Office Printer Automation (Non-Interactive)
+- name: Office Printer Automation (Non-Interactive) 
   hosts: windows_host
   gather_facts: no
 
