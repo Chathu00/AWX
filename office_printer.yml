@@ -1,63 +1,78 @@
-- name: Office Printer Automation - Stable and Final Version
+- name: Office Printer Automation - Final Version with Full Output
   hosts: windows_host
   gather_facts: no
 
   vars:
     printer_name: "OfficePrinter1"
-    printer_ip: "192.168.1.50"  # Change as needed
+    printer_ip: "192.168.1.50"  # Replace with actual IP if needed
     printer_driver_name: "Microsoft Print to PDF"
 
   tasks:
 
-    - name: Check if Printer Already Exists
+    - name: 🔍 Check if Printer Already Exists
       win_shell: |
         $printer = Get-Printer -Name "{{ printer_name }}" -ErrorAction SilentlyContinue
         if ($printer) { Write-Output "Exists" } else { Write-Output "NotExists" }
       register: printer_status
 
-    - name: Set Fact - Printer Exists
+    - name: 📢 Printer Existence Status
+      debug:
+        msg: "Printer '{{ printer_name }}' exists: {{ 'Exists' in printer_status.stdout }}"
+
+    - name: 💾 Set Fact - Printer Exists
       set_fact:
         printer_exists: "{{ 'Exists' in printer_status.stdout }}"
 
-    - name: Get Existing Printer Ports
+    - name: 📦 Get Existing Printer Ports
       win_shell: Get-PrinterPort | Select-Object -ExpandProperty Name
       register: printer_ports
 
-    - name: Check if Printer Port Already Exists
+    - name: 📢 Available Printer Ports
+      debug:
+        var: printer_ports.stdout_lines
+
+    - name: 🔁 Set Fact - Port Exists
       set_fact:
         port_exists: "{{ printer_ip in printer_ports.stdout_lines }}"
 
-    - name: Add Printer Port if Not Exists
+    - name: ➕ Add Printer Port if Not Exists
       win_shell: |
         Add-PrinterPort -Name "{{ printer_ip }}" -PrinterHostAddress "{{ printer_ip }}"
       when: not port_exists
+      register: port_add_result
 
-    - name: Add Printer if Not Exists
+    - name: 📢 Printer Port Add Result
+      debug:
+        var: port_add_result.stdout_lines
+      when: not port_exists
+
+    - name: 🖨️ Add Printer if Not Exists
       win_shell: |
         Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "{{ printer_driver_name }}"
       when: not printer_exists
       register: printer_add_result
       ignore_errors: yes
 
-    - name: Debug - Printer Installation Output
+    - name: 📢 Printer Add Output
       debug:
         var: printer_add_result.stdout_lines
       when: not printer_exists
 
-    - name: Set Default Printer
+    - name: ⭐ Set Default Printer
       win_shell: |
         $printer = Get-Printer -Name "{{ printer_name }}" -ErrorAction SilentlyContinue
         if ($printer) {
           (New-Object -ComObject WScript.Network).SetDefaultPrinter("{{ printer_name }}")
+          Write-Output "Default printer set to '{{ printer_name }}'"
         }
       register: default_set
       ignore_errors: yes
 
-    - name: Debug - Default Printer Result
+    - name: 📢 Default Printer Result
       debug:
-        var: default_set.stdout
+        var: default_set.stdout_lines
 
-    - name: Check for Stuck Print Jobs
+    - name: 🧠 Check for Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object {
           Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" }
@@ -65,7 +80,11 @@
       register: stuck_jobs
       ignore_errors: yes
 
-    - name: Remove Stuck Print Jobs
+    - name: 📢 Stuck Jobs Found
+      debug:
+        var: stuck_jobs.stdout_lines
+
+    - name: ❌ Remove Stuck Print Jobs
       win_shell: |
         Get-Printer | ForEach-Object {
           Get-PrintJob -PrinterName $_.Name | Where-Object { $_.JobStatus -match "Error" } | ForEach-Object {
@@ -73,12 +92,18 @@
           }
         }
       when: stuck_jobs.stdout | length > 0
+      register: jobs_removed
 
-    - name: Restart Print Spooler Service
+    - name: 📢 Stuck Jobs Removed
+      debug:
+        var: jobs_removed.stdout_lines
+      when: stuck_jobs.stdout | length > 0
+
+    - name: 🔄 Restart Print Spooler Service
       win_shell: Restart-Service Spooler
       register: spooler_restart
       ignore_errors: yes
 
-    - name: Debug - Spooler Restarted
+    - name: 📢 Spooler Restart Output
       debug:
-        msg: "✅ Print Spooler restarted successfully."
+        var: spooler_restart.stdout
