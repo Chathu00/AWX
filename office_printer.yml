@@ -34,7 +34,7 @@
 
     - name: ✅ Printer Port Added
       debug:
-        msg: "Printer port {{ printer_ip }} added successfully."
+        msg: "✅ Printer port '{{ printer_ip }}' added successfully."
       when: not port_exists and port_add_result.rc == 0
 
     - name: Add Printer (if not exists)
@@ -46,12 +46,12 @@
 
     - name: ✅ Printer Added Successfully
       debug:
-        msg: "Printer '{{ printer_name }}' added successfully."
+        msg: "🖨️ Printer '{{ printer_name }}' added successfully."
       when: not printer_exists and printer_add_result.rc == 0
 
     - name: ⚠️ Printer Already Exists
       debug:
-        msg: "Printer '{{ printer_name }}' already exists. Skipping add."
+        msg: "⚠️ Printer '{{ printer_name }}' already exists. Skipping add."
       when: printer_exists
 
     - name: Set Default Printer
@@ -59,7 +59,7 @@
         $printer = Get-Printer -Name "{{ printer_name }}" -ErrorAction SilentlyContinue
         if ($printer) {
           (New-Object -ComObject WScript.Network).SetDefaultPrinter("{{ printer_name }}")
-          Write-Output "Default printer set to '{{ printer_name }}'"
+          Write-Output "✅ Default printer set to '{{ printer_name }}'"
         }
       register: default_set
       ignore_errors: true
@@ -76,6 +76,5 @@
 
     - name: 🔄 Spooler Restarted
       debug:
-        msg: "Print Spooler service restarted successfully."
+        msg: "🔄 Print Spooler service restarted successfully."
       when: spooler_restart.rc == 0
-
