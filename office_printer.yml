@@ -1,15 +1,16 @@
-- name: Reusable Office Printer Setup
+- name: Reusable Office Printer Setup with Clean Output
   hosts: windows_host
   gather_facts: no
-
   vars_prompt:
-    - name: printer_name
+    - name: "printer_name"
       prompt: "Enter the printer name"
       private: no
-    - name: printer_ip
+
+    - name: "printer_ip"
       prompt: "Enter the printer IP address"
       private: no
-    - name: printer_driver_name
+
+    - name: "printer_driver_name"
       prompt: "Enter the printer driver name (default: Microsoft Print to PDF)"
       private: no
       default: "Microsoft Print to PDF"
@@ -34,7 +35,7 @@
       set_fact:
         port_exists: "{{ printer_ip in printer_ports.stdout_lines }}"
 
-    - name: Add Printer Port (if not exists)
+    - name: Add Printer Port if Not Exists
       win_shell: Add-PrinterPort -Name "{{ printer_ip }}" -PrinterHostAddress "{{ printer_ip }}"
       when: not port_exists
       register: port_add_result
@@ -44,16 +45,21 @@
         msg: "✅ Printer port '{{ printer_ip }}' added successfully."
       when: not port_exists and port_add_result.rc == 0
 
-    - name: Add Printer (if not exists)
+    - name: ⚠️ Printer Port Already Exists
+      debug:
+        msg: "⚠️ Printer port '{{ printer_ip }}' already exists."
+      when: port_exists
+
+    - name: Add Printer if Not Exists
       win_shell: |
         Add-Printer -Name "{{ printer_name }}" -PortName "{{ printer_ip }}" -DriverName "{{ printer_driver_name }}"
       when: not printer_exists
       register: printer_add_result
       ignore_errors: true
 
-    - name: ✅ Printer Added Successfully
+    - name: ✅ Printer Added
       debug:
-        msg: "🖨️ Printer '{{ printer_name }}' added successfully."
+        msg: "✅ Printer '{{ printer_name }}' added successfully with driver '{{ printer_driver_name }}'."
       when: not printer_exists and printer_add_result.rc == 0
 
     - name: ⚠️ Printer Already Exists
