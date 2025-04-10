@@ -13,7 +13,7 @@
     - name: "printer_driver_name"
       prompt: "Enter the printer driver name (default: Microsoft Print to PDF)"
       private: no
-      default: "Microsoft Print to PDF"
+      default: "HP Universal Printing PCL 6"
 
   tasks:
 
