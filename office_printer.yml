@@ -1,4 +1,4 @@
-- name: Reusable Office Printer Setup with Clean Output and Stuck Job Export
+- name: Reusable Office Printer Setup with Stuck Job Export and Clear Output
   hosts: windows_host
   gather_facts: no
 
@@ -104,7 +104,7 @@
         }
       register: stuck_jobs
 
-    - name: 💾 Save stuck print job details to file before clearing
+    - name: 💾 Save Stuck Print Job Details to File
       win_shell: |
         $printerName = "{{ printer_name }}"
         $outputFolder = "C:\\Temp"
@@ -118,23 +118,23 @@
         $jobs = Get-PrintJob -PrinterName $printerName | Where-Object { $_.JobStatus -like "*Error*" -or $_.JobStatus -like "*Blocked*" }
         if ($jobs) {
           $jobs | Select-Object ID, Document, SubmittedBy, JobSize, PagesPrinted, JobStatus, TimeSubmitted | ConvertTo-Json | Out-File $outputPath -Encoding UTF8
-          Write-Output $outputPath
+          Write-Output "SavedPath:$outputPath"
         } else {
-          Write-Output "No stuck jobs to save."
+          Write-Output "NoStuckJobs"
         }
       when: "'Stuck' in stuck_jobs.stdout"
       register: stuck_job_export
       ignore_errors: true
 
-    - name: 📁 Path to Exported Stuck Jobs File
+    - name: 📁 Show Path to Exported Stuck Jobs File
       debug:
         msg: >
-          {% if 'C:\\Temp' in stuck_job_export.stdout %}
-          💾 Stuck job details saved to: {{ stuck_job_export.stdout }}
+          {% if 'SavedPath:' in stuck_job_export.stdout %}
+          💾 Stuck job details saved to: {{ stuck_job_export.stdout | regex_replace('SavedPath:', '') }}
           {% else %}
-          ℹ️ No stuck jobs to save.
+          ℹ️ No stuck print jobs found to export.
           {% endif %}
-      when: stuck_job_export.stdout is defined and stuck_job_export.stdout != ""
+      when: stuck_job_export.stdout is defined
 
     - name: 🗑️ Clear Stuck Print Jobs
       win_shell: |
