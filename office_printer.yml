@@ -1,6 +1,7 @@
-- name: Reusable Office Printer Setup with Clean Output
+- name: Reusable Office Printer Setup with Clean Output and Stuck Job Handling
   hosts: windows_host
   gather_facts: no
+
   vars_prompt:
     - name: "printer_name"
       prompt: "Enter the printer name"
@@ -13,7 +14,7 @@
     - name: "printer_driver_name"
       prompt: "Enter the printer driver name (default: Microsoft Print to PDF)"
       private: no
-      default: "HP Universal Printing PCL 6"
+      default: "Microsoft Print to PDF"
 
   tasks:
 
@@ -82,19 +83,31 @@
         msg: "{{ default_set.stdout }}"
       when: default_set.stdout is defined and default_set.stdout != ""
 
-    - name: Clear All Print Jobs for the Printer
-      win_shell: |
-        $printer = Get-Printer -Name "{{ printer_name }}" -ErrorAction SilentlyContinue
-        if ($printer) {
-          Get-PrintJob -PrinterName "{{ printer_name }}" | Remove-PrintJob
-          Write-Output "🧹 Cleared all stuck print jobs for '{{ printer_name }}'"
-        }
-      register: clear_jobs
+    # ✅ Stuck Print Job Handling
 
-    - name: 🧹 Print Jobs Cleared
+    - name: 🔍 Identify Stuck Print Jobs
+      win_shell: |
+        Get-PrintJob -PrinterName "{{ printer_name }}" | Where-Object { $_.JobStatus -match "Error|Printing" } |
+        Select-Object ID, Name, Document, JobStatus, SubmittedTime | ConvertTo-Json -Depth 2
+      register: stuck_jobs
+
+    - name: 💾 Save Stuck Print Jobs to File
+      win_copy:
+        content: "{{ stuck_jobs.stdout }}"
+        dest: "C:\\Temp\\stuck_print_jobs_{{ printer_name }}.json"
+      when: stuck_jobs.stdout != ""
+
+    - name: 🧹 Clear Only Stuck Print Jobs
+      win_shell: |
+        Get-PrintJob -PrinterName "{{ printer_name }}" | Where-Object { $_.JobStatus -match "Error|Printing" } |
+        Remove-PrintJob
+      when: stuck_jobs.stdout != ""
+      register: clear_stuck
+
+    - name: ✅ Stuck Print Jobs Cleared
       debug:
-        msg: "{{ clear_jobs.stdout }}"
-      when: clear_jobs.stdout is defined and clear_jobs.stdout != ""
+        msg: "✅ Stuck print jobs for '{{ printer_name }}' were cleared and saved to C:\\Temp\\stuck_print_jobs_{{ printer_name }}.json."
+      when: clear_stuck.rc == 0 and stuck_jobs.stdout != ""
 
     - name: Restart Print Spooler Service
       win_shell: Restart-Service Spooler
