@@ -1,4 +1,4 @@
-- name: Reusable Office Printer Setup with Stuck Job Backup
+- name: Reusable Office Printer Setup with Clean Output and Stuck Job Export
   hosts: windows_host
   gather_facts: no
 
@@ -93,28 +93,47 @@
         msg: "🔄 Print Spooler service restarted successfully."
       when: spooler_restart.rc == 0
 
-    # STUCK JOB HANDLING SECTION
-    - name: Get Stuck Print Jobs
+    - name: 📋 Check for Stuck Print Jobs
       win_shell: |
-        $jobs = Get-PrintJob -PrinterName "{{ printer_name }}" | Where-Object { $_.JobStatus -match 'Error|PaperOut|Offline|UserIntervention' }
+        $printerName = "{{ printer_name }}"
+        $jobs = Get-PrintJob -PrinterName $printerName | Where-Object { $_.JobStatus -like "*Error*" -or $_.JobStatus -like "*Blocked*" }
         if ($jobs) {
-          $jobs | ConvertTo-Json -Depth 3 | Out-File "C:\\Temp\\stuck_print_jobs_{{ printer_name }}.json"
-          Write-Output $jobs.Count
+          Write-Output "Stuck"
+        } else {
+          Write-Output "Clear"
         }
       register: stuck_jobs
-      ignore_errors: yes
 
-    - name: Clear Stuck Print Jobs
+    - name: 💾 Save stuck print job details to file before clearing
       win_shell: |
-        Get-PrintJob -PrinterName "{{ printer_name }}" | Where-Object { $_.JobStatus -match 'Error|PaperOut|Offline|UserIntervention' } | Remove-PrintJob
-      when: stuck_jobs.stdout != ""
-      register: clear_stuck
-      ignore_errors: yes
+        $printerName = "{{ printer_name }}"
+        $outputPath = "C:\\Temp\\stuck_print_jobs_${printerName}.json"
+        $jobs = Get-PrintJob -PrinterName $printerName | Where-Object { $_.JobStatus -like "*Error*" -or $_.JobStatus -like "*Blocked*" }
+        if ($jobs) {
+          $jobs | Select-Object ID, Document, SubmittedBy, JobSize, PagesPrinted, JobStatus, TimeSubmitted | ConvertTo-Json | Out-File $outputPath -Encoding UTF8
+          Write-Output "Saved stuck print job info to $outputPath"
+        } else {
+          Write-Output "No stuck jobs to save."
+        }
+      when: "'Stuck' in stuck_jobs.stdout"
+      register: stuck_job_export
+      ignore_errors: true
+
+    - name: 📁 Stuck Print Jobs Exported
+      debug:
+        msg: "{{ stuck_job_export.stdout }}"
+      when: "'Stuck' in stuck_jobs.stdout and stuck_job_export.stdout != ''"
+
+    - name: 🗑️ Clear Stuck Print Jobs
+      win_shell: |
+        $printerName = "{{ printer_name }}"
+        Get-PrintJob -PrinterName $printerName | Where-Object { $_.JobStatus -like "*Error*" -or $_.JobStatus -like "*Blocked*" } | Remove-PrintJob -Confirm:$false
+        Write-Output "Cleared stuck jobs on '{{ printer_name }}'"
+      when: "'Stuck' in stuck_jobs.stdout"
+      register: clear_stuck_jobs
+      ignore_errors: true
 
     - name: ✅ Stuck Print Jobs Cleared
       debug:
-        msg: "✅ Stuck print jobs for '{{ printer_name }}' were cleared and saved to C:\\Temp\\stuck_print_jobs_{{ printer_name }}.json."
-      when:
-        - stuck_jobs.stdout != ""
-        - clear_stuck is defined
-        - clear_stuck.rc == 0
+        msg: "{{ clear_stuck_jobs.stdout }}"
+      when: clear_stuck_jobs.stdout is defined and clear_stuck_jobs.stdout != ""
