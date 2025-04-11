@@ -1,4 +1,4 @@
-- name: Reusable Office Printer Setup with Stuck Job Export and Clear Output
+- name: Reusable Office Printer Setup with Stuck Job Export and Display
   hosts: windows_host
   gather_facts: no
 
@@ -135,6 +135,22 @@
           ℹ️ No stuck print jobs found to export.
           {% endif %}
       when: stuck_job_export.stdout is defined
+
+    - name: 📂 Read and Display Exported Stuck Print Job Details
+      win_shell: |
+        $path = "C:\\Temp\\stuck_print_jobs_{{ printer_name }}.json"
+        if (Test-Path $path) {
+          Get-Content $path -Raw
+        } else {
+          Write-Output "No file found at $path"
+        }
+      register: stuck_job_file_contents
+      when: stuck_job_export.stdout is defined and "'SavedPath:' in stuck_job_export.stdout"
+
+    - name: 📄 Show Stuck Print Job Contents
+      debug:
+        msg: "{{ stuck_job_file_contents.stdout }}"
+      when: stuck_job_file_contents.stdout is defined and stuck_job_file_contents.stdout != ""
 
     - name: 🗑️ Clear Stuck Print Jobs
       win_shell: |
