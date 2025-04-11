@@ -82,6 +82,20 @@
         msg: "{{ default_set.stdout }}"
       when: default_set.stdout is defined and default_set.stdout != ""
 
+    - name: Clear All Print Jobs for the Printer
+      win_shell: |
+        $printer = Get-Printer -Name "{{ printer_name }}" -ErrorAction SilentlyContinue
+        if ($printer) {
+          Get-PrintJob -PrinterName "{{ printer_name }}" | Remove-PrintJob
+          Write-Output "🧹 Cleared all stuck print jobs for '{{ printer_name }}'"
+        }
+      register: clear_jobs
+
+    - name: 🧹 Print Jobs Cleared
+      debug:
+        msg: "{{ clear_jobs.stdout }}"
+      when: clear_jobs.stdout is defined and clear_jobs.stdout != ""
+
     - name: Restart Print Spooler Service
       win_shell: Restart-Service Spooler
       register: spooler_restart
