@@ -107,11 +107,18 @@
     - name: 💾 Save stuck print job details to file before clearing
       win_shell: |
         $printerName = "{{ printer_name }}"
-        $outputPath = "C:\\Temp\\stuck_print_jobs_${printerName}.json"
+        $outputFolder = "C:\\Temp"
+        $outputFile = "stuck_print_jobs_${printerName}.json"
+        $outputPath = Join-Path $outputFolder $outputFile
+
+        if (!(Test-Path $outputFolder)) {
+          New-Item -Path $outputFolder -ItemType Directory -Force
+        }
+
         $jobs = Get-PrintJob -PrinterName $printerName | Where-Object { $_.JobStatus -like "*Error*" -or $_.JobStatus -like "*Blocked*" }
         if ($jobs) {
           $jobs | Select-Object ID, Document, SubmittedBy, JobSize, PagesPrinted, JobStatus, TimeSubmitted | ConvertTo-Json | Out-File $outputPath -Encoding UTF8
-          Write-Output "Saved stuck print job info to $outputPath"
+          Write-Output $outputPath
         } else {
           Write-Output "No stuck jobs to save."
         }
@@ -119,10 +126,15 @@
       register: stuck_job_export
       ignore_errors: true
 
-    - name: 📁 Stuck Print Jobs Exported
+    - name: 📁 Path to Exported Stuck Jobs File
       debug:
-        msg: "{{ stuck_job_export.stdout }}"
-      when: "'Stuck' in stuck_jobs.stdout and stuck_job_export.stdout != ''"
+        msg: >
+          {% if 'C:\\Temp' in stuck_job_export.stdout %}
+          💾 Stuck job details saved to: {{ stuck_job_export.stdout }}
+          {% else %}
+          ℹ️ No stuck jobs to save.
+          {% endif %}
+      when: stuck_job_export.stdout is defined and stuck_job_export.stdout != ""
 
     - name: 🗑️ Clear Stuck Print Jobs
       win_shell: |
